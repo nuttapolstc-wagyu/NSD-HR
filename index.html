@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NSD & Propster Studio · ระบบ HR</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&display=swap" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Sarabun, "Noto Sans Thai", sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import { Fragment, jsx, jsxs } from "https://esm.sh/react@18.3.1/jsx-runtime";
+import React, { useState, useEffect, useRef } from "https://esm.sh/react@18.3.1";
+import ReactDOM from "https://esm.sh/react-dom@18.3.1/client?external=react";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import {
+  Clock,
+  Calendar,
+  Users,
+  Wallet,
+  Camera,
+  Plus,
+  Check,
+  X,
+  ChevronRight,
+  ChevronLeft,
+  LogIn,
+  LogOut,
+  FileText,
+  ShieldCheck,
+  User,
+  Trash2,
+  ChevronDown,
+  Briefcase,
+  Phone,
+  Sparkles,
+  Bell,
+  Lock,
+  KeyRound,
+  LogOut as LogOutIcon,
+  CircleCheck,
+  CircleDashed,
+  Settings,
+  RefreshCw,
+  Wrench,
+  Download,
+  AlertCircle,
+  Battery,
+  Mouse
+} from "https://esm.sh/lucide-react@0.263.1?external=react";
+window.storage = {
+  async get(key, shared) {
+    const raw = localStorage.getItem(`hrstore:${shared ? "shared" : "personal"}:${key}`);
+    if (raw === null) throw new Error("not found");
+    return { key, value: raw, shared: !!shared };
+  },
+  async set(key, value, shared) {
+    localStorage.setItem(`hrstore:${shared ? "shared" : "personal"}:${key}`, value);
+    return { key, value, shared: !!shared };
+  },
+  async delete(key, shared) {
+    localStorage.removeItem(`hrstore:${shared ? "shared" : "personal"}:${key}`);
+    return { key, deleted: true, shared: !!shared };
+  },
+  async list(prefix, shared) {
+    const p = `hrstore:${shared ? "shared" : "personal"}:${prefix || ""}`;
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(p)) keys.push(k.slice(`hrstore:${shared ? "shared" : "personal"}:`.length));
+    }
+    return { keys, prefix, shared: !!shared };
+  }
+};
+const STORAGE_KEY = "hr-office-data-v3";
+const LEAVE_TYPES = ["\u0E25\u0E32\u0E1B\u0E48\u0E27\u0E22", "\u0E25\u0E32\u0E01\u0E34\u0E08", "\u0E25\u0E32\u0E1E\u0E31\u0E01\u0E23\u0E49\u0E2D\u0E19", "\u0E25\u0E32\u0E2D\u0E37\u0E48\u0E19\u0E46"];
+const REQUEST_CATEGORIES = ["\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E0A\u0E33\u0E23\u0E38\u0E14", "\u0E02\u0E2D\u0E07\u0E43\u0E0A\u0E49\u0E2B\u0E21\u0E14", "\u0E23\u0E30\u0E1A\u0E1A/\u0E40\u0E17\u0E04\u0E19\u0E34\u0E04", "\u0E2D\u0E37\u0E48\u0E19\u0E46"];
+const AVATAR_COLORS = ["bg-amber-500", "bg-emerald-500", "bg-sky-500", "bg-rose-500", "bg-violet-500", "bg-teal-500", "bg-orange-500", "bg-indigo-500"];
+const NAV_ITEMS = [
+  { id: "clock", label: "\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32", icon: Clock },
+  { id: "leave", label: "\u0E25\u0E32\u0E07\u0E32\u0E19", icon: Calendar },
+  { id: "requests", label: "\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32", icon: Wrench },
+  { id: "people", label: "\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19", icon: Users },
+  { id: "payroll", label: "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19", icon: Wallet }
+];
+function last4(phone) {
+  const d = (phone || "").replace(/\D/g, "").slice(-4);
+  return d.length === 4 ? d : "0000";
+}
+const DEFAULT_LEAVE_QUOTA = { "\u0E25\u0E32\u0E1B\u0E48\u0E27\u0E22": 30, "\u0E25\u0E32\u0E01\u0E34\u0E08": 3, "\u0E25\u0E32\u0E1E\u0E31\u0E01\u0E23\u0E49\u0E2D\u0E19": 6, "\u0E25\u0E32\u0E2D\u0E37\u0E48\u0E19\u0E46": 0 };
+const displayFont = { fontFamily: "'Noto Serif Thai', serif" };
+function seedData() {
+  const employees = [
+    { id: "e1", name: "\u0E27\u0E34\u0E28\u0E13\u0E35 \u0E40\u0E0A\u0E37\u0E49\u0E2D\u0E1E\u0E23\u0E32\u0E2B\u0E21\u0E13\u0E4C", position: "Co-Founder", phone: "063-329-5161", salary: 0, photo: null, documents: [], pin: "5161", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } },
+    { id: "e2", name: "\u0E13\u0E31\u0E10\u0E1E\u0E25 \u0E41\u0E2A\u0E07\u0E17\u0E2D\u0E07\u0E09\u0E32\u0E22", position: "Design Director", phone: "064-974-5928", salary: 0, photo: null, documents: [], pin: "5928", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } },
+    { id: "e3", name: "\u0E14\u0E32\u0E23\u0E32\u0E1E\u0E23\u0E23\u0E13 \u0E27\u0E23\u0E23\u0E13\u0E2D\u0E38\u0E14\u0E21", position: "Interior Designer", phone: "096-296-3928", salary: 0, photo: null, documents: [], pin: "3928", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } },
+    { id: "e4", name: "\u0E1A\u0E38\u0E23\u0E13\u0E35 \u0E1A\u0E23\u0E23\u0E22\u0E07\u0E01\u0E4C\u0E2A\u0E34\u0E19\u0E18\u0E38\u0E4C", position: "Interior Designer", phone: "086-408-2515", salary: 0, photo: null, documents: [], pin: "2515", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } },
+    { id: "e5", name: "\u0E2A\u0E38\u0E17\u0E18\u0E32\u0E2A\u0E34\u0E19\u0E35 \u0E13 \u0E23\u0E38\u0E48\u0E07\u0E28\u0E34\u0E25\u0E1B\u0E4C", position: "Propstylist", phone: "092-293-6695", salary: 0, photo: null, documents: [], pin: "6695", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } },
+    { id: "e6", name: "\u0E27\u0E23\u0E23\u0E13\u0E20\u0E32 \u0E1B\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E28\u0E23\u0E35", position: "\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E27\u0E32\u0E01\u0E34\u0E27", phone: "091-226-1125", salary: 0, photo: null, documents: [], pin: "1125", leaveQuota: { ...DEFAULT_LEAVE_QUOTA } }
+  ];
+  const holidays = [
+    { id: "h1", date: "2026-01-01", name: "\u0E27\u0E31\u0E19\u0E02\u0E36\u0E49\u0E19\u0E1B\u0E35\u0E43\u0E2B\u0E21\u0E48" },
+    { id: "h2", date: "2026-04-06", name: "\u0E27\u0E31\u0E19\u0E08\u0E31\u0E01\u0E23\u0E35" },
+    { id: "h3", date: "2026-04-13", name: "\u0E27\u0E31\u0E19\u0E2A\u0E07\u0E01\u0E23\u0E32\u0E19\u0E15\u0E4C" },
+    { id: "h4", date: "2026-04-14", name: "\u0E27\u0E31\u0E19\u0E2A\u0E07\u0E01\u0E23\u0E32\u0E19\u0E15\u0E4C" },
+    { id: "h5", date: "2026-05-01", name: "\u0E27\u0E31\u0E19\u0E41\u0E23\u0E07\u0E07\u0E32\u0E19\u0E41\u0E2B\u0E48\u0E07\u0E0A\u0E32\u0E15\u0E34" },
+    { id: "h6", date: "2026-07-28", name: "\u0E27\u0E31\u0E19\u0E40\u0E09\u0E25\u0E34\u0E21\u0E1E\u0E23\u0E30\u0E0A\u0E19\u0E21\u0E1E\u0E23\u0E23\u0E29\u0E32 \u0E23.10" },
+    { id: "h7", date: "2026-08-12", name: "\u0E27\u0E31\u0E19\u0E41\u0E21\u0E48\u0E41\u0E2B\u0E48\u0E07\u0E0A\u0E32\u0E15\u0E34" },
+    { id: "h8", date: "2026-10-23", name: "\u0E27\u0E31\u0E19\u0E1B\u0E34\u0E22\u0E21\u0E2B\u0E32\u0E23\u0E32\u0E0A" },
+    { id: "h9", date: "2026-12-05", name: "\u0E27\u0E31\u0E19\u0E1E\u0E48\u0E2D\u0E41\u0E2B\u0E48\u0E07\u0E0A\u0E32\u0E15\u0E34" },
+    { id: "h10", date: "2026-12-31", name: "\u0E27\u0E31\u0E19\u0E2A\u0E34\u0E49\u0E19\u0E1B\u0E35" }
+  ];
+  const rules = [
+    { id: "r1", title: "\u0E40\u0E27\u0E25\u0E32\u0E17\u0E33\u0E07\u0E32\u0E19", description: "\u0E40\u0E02\u0E49\u0E32\u0E07\u0E32\u0E19 09:00 \u0E19. \u0E40\u0E25\u0E34\u0E01\u0E07\u0E32\u0E19 18:00 \u0E19. \u0E1E\u0E31\u0E01\u0E40\u0E17\u0E35\u0E48\u0E22\u0E07 1 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07" },
+    { id: "r2", title: "\u0E01\u0E32\u0E23\u0E02\u0E2D\u0E25\u0E32", description: "\u0E41\u0E08\u0E49\u0E07\u0E25\u0E32\u0E25\u0E48\u0E27\u0E07\u0E2B\u0E19\u0E49\u0E32\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E19\u0E49\u0E2D\u0E22 1 \u0E27\u0E31\u0E19 \u0E22\u0E01\u0E40\u0E27\u0E49\u0E19\u0E01\u0E23\u0E13\u0E35\u0E25\u0E32\u0E1B\u0E48\u0E27\u0E22\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19" },
+    { id: "r3", title: "\u0E01\u0E32\u0E23\u0E17\u0E33\u0E07\u0E32\u0E19\u0E25\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32", description: "OT \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E04\u0E27\u0E32\u0E21\u0E40\u0E2B\u0E47\u0E19\u0E0A\u0E2D\u0E1A\u0E08\u0E32\u0E01\u0E2B\u0E31\u0E27\u0E2B\u0E19\u0E49\u0E32\u0E07\u0E32\u0E19\u0E01\u0E48\u0E2D\u0E19\u0E25\u0E48\u0E27\u0E07\u0E2B\u0E19\u0E49\u0E32" }
+  ];
+  return { employees, attendance: [], leaves: [], payrollPaid: {}, notifications: [], adminPin: "0000", requests: [], holidays, rules };
+}
+function todayStr() {
+  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+}
+function nowTimeStr() {
+  return (/* @__PURE__ */ new Date()).toTimeString().slice(0, 5);
+}
+function nowStamp() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function monthKey(dateStr) {
+  return dateStr.slice(0, 7);
+}
+function hoursBetween(inT, outT) {
+  const [ih, im] = inT.split(":").map(Number);
+  const [oh, om] = outT.split(":").map(Number);
+  let diff = (oh * 60 + om - (ih * 60 + im)) / 60;
+  if (diff < 0) diff += 24;
+  return Math.round(diff * 100) / 100;
+}
+function formatThaiDate(dateStr) {
+  const d = /* @__PURE__ */ new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+}
+function monthLabel(mk) {
+  const [y, m] = mk.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString("th-TH", { month: "long", year: "numeric" });
+}
+function initials(name) {
+  return name.trim().slice(0, 1);
+}
+function avatarColor(id) {
+  let sum = 0;
+  for (const c of id) sum += c.charCodeAt(0);
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
+}
+function fmtMoney(n) {
+  return n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+function downloadSheet(rows, sheetName, fileName) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, fileName);
+}
+function exportEmployeesXlsx(data) {
+  const rows = data.employees.map((e) => ({
+    "\u0E0A\u0E37\u0E48\u0E2D-\u0E19\u0E32\u0E21\u0E2A\u0E01\u0E38\u0E25": e.name,
+    "\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07": e.position,
+    "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23": e.phone,
+    "\u0E2D\u0E35\u0E40\u0E21\u0E25": e.email || "",
+    "\u0E40\u0E25\u0E02\u0E1A\u0E31\u0E15\u0E23\u0E1B\u0E23\u0E30\u0E0A\u0E32\u0E0A\u0E19": e.idCard || "",
+    "\u0E27\u0E31\u0E19\u0E40\u0E01\u0E34\u0E14": e.birthDate || "",
+    "\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48": e.address || "",
+    "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19": e.salary,
+    "\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19": e.emergencyName || "",
+    "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19": e.emergencyPhone || "",
+    "\u0E04\u0E27\u0E32\u0E21\u0E2A\u0E31\u0E21\u0E1E\u0E31\u0E19\u0E18\u0E4C": e.emergencyRelation || ""
+  }));
+  downloadSheet(rows, "\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19", `\u0E23\u0E32\u0E22\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19_${todayStr()}.xlsx`);
+}
+function exportAttendanceXlsx(data) {
+  const mk = monthKey(todayStr());
+  const rows = data.attendance.filter((a) => monthKey(a.date) === mk).sort((a, b) => a.date.localeCompare(b.date)).map((a) => {
+    const emp = data.employees.find((e) => e.id === a.employeeId);
+    const hrs = a.clockOut ? hoursBetween(a.clockIn, a.clockOut) : "";
+    const ot = a.clockOut ? Math.max(0, hoursBetween(a.clockIn, a.clockOut) - 8) : "";
+    return {
+      "\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19": emp?.name || a.employeeId,
+      "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48": a.date,
+      "\u0E40\u0E02\u0E49\u0E32\u0E07\u0E32\u0E19": a.clockIn,
+      "\u0E2D\u0E2D\u0E01\u0E07\u0E32\u0E19": a.clockOut || "",
+      "\u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07\u0E17\u0E33\u0E07\u0E32\u0E19": hrs,
+      "\u0E42\u0E2D\u0E17\u0E35 (\u0E0A\u0E21.)": ot,
+      "\u0E07\u0E32\u0E19/\u0E42\u0E1B\u0E23\u0E40\u0E08\u0E04": a.project || ""
+    };
+  });
+  downloadSheet(rows, "\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32", `\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32_${mk}.xlsx`);
+}
+function exportPayrollXlsx(data) {
+  const mk = monthKey(todayStr());
+  const rows = data.employees.map((emp) => {
+    const records = data.attendance.filter((a) => a.employeeId === emp.id && monthKey(a.date) === mk && a.clockOut);
+    const otHours = records.reduce((s, r) => s + Math.max(0, hoursBetween(r.clockIn, r.clockOut) - 8), 0);
+    const hourlyRate = emp.salary / 208;
+    const otPay = Math.round(otHours * hourlyRate * 1.5);
+    const paid = !!data.payrollPaid[`${emp.id}-${mk}`];
+    return {
+      "\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19": emp.name,
+      "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E21\u0E32\u0E17\u0E33\u0E07\u0E32\u0E19": records.length,
+      "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E1E\u0E37\u0E49\u0E19\u0E10\u0E32\u0E19": emp.salary,
+      "\u0E42\u0E2D\u0E17\u0E35 (\u0E0A\u0E21.)": otHours.toFixed(1),
+      "\u0E04\u0E48\u0E32\u0E42\u0E2D\u0E17\u0E35": otPay,
+      "\u0E23\u0E27\u0E21\u0E2A\u0E38\u0E17\u0E18\u0E34": emp.salary + otPay,
+      "\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E08\u0E48\u0E32\u0E22": paid ? "\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27" : "\u0E23\u0E2D\u0E08\u0E48\u0E32\u0E22"
+    };
+  });
+  downloadSheet(rows, "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19", `\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19_${mk}.xlsx`);
+}
+function exportRequestsXlsx(data) {
+  const statusLabel = { pending: "\u0E23\u0E2D\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23", in_progress: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23", resolved: "\u0E41\u0E01\u0E49\u0E44\u0E02\u0E41\u0E25\u0E49\u0E27" };
+  const rows = data.requests.sort((a, b) => b.id.localeCompare(a.id)).map((r) => {
+    const emp = data.employees.find((e) => e.id === r.employeeId);
+    return {
+      "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E41\u0E08\u0E49\u0E07": formatThaiDate(r.date),
+      "\u0E1C\u0E39\u0E49\u0E41\u0E08\u0E49\u0E07": emp?.name || r.employeeId,
+      "\u0E2B\u0E21\u0E27\u0E14\u0E2B\u0E21\u0E39\u0E48": r.category,
+      "\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14": r.description,
+      "\u0E2A\u0E16\u0E32\u0E19\u0E30": statusLabel[r.status] || r.status
+    };
+  });
+  downloadSheet(rows, "\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32", `\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32_${todayStr()}.xlsx`);
+}
+function daysInclusive(startDate, endDate) {
+  const s = /* @__PURE__ */ new Date(startDate + "T00:00:00");
+  const e = /* @__PURE__ */ new Date(endDate + "T00:00:00");
+  return Math.round((e - s) / 864e5) + 1;
+}
+function leaveUsed(data, employeeId, type, year) {
+  return data.leaves.filter((l) => l.employeeId === employeeId && l.type === type && l.status === "approved" && l.startDate.slice(0, 4) === year).reduce((sum, l) => sum + daysInclusive(l.startDate, l.endDate), 0);
+}
+function timeAgo(stamp) {
+  const diffMs = Date.now() - new Date(stamp).getTime();
+  const mins = Math.floor(diffMs / 6e4);
+  if (mins < 1) return "\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48";
+  if (mins < 60) return `${mins} \u0E19\u0E32\u0E17\u0E35\u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} \u0E0A\u0E21.\u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`;
+  return `${Math.floor(hrs / 24)} \u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`;
+}
+function Avatar({ emp, size = "w-10 h-10", textSize = "text-sm" }) {
+  if (emp?.photo) return /* @__PURE__ */ jsx("img", { src: emp.photo, alt: emp.name, className: `${size} rounded-full object-cover` });
+  return /* @__PURE__ */ jsx("div", { className: `${size} ${avatarColor(emp?.id || "x")} rounded-full flex items-center justify-center text-white font-semibold ${textSize}`, children: initials(emp?.name || "?") });
+}
+function Badge({ status }) {
+  const map = {
+    pending: { label: "\u0E23\u0E2D\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34", cls: "bg-amber-100 text-amber-700" },
+    approved: { label: "\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34\u0E41\u0E25\u0E49\u0E27", cls: "bg-emerald-100 text-emerald-700" },
+    rejected: { label: "\u0E44\u0E21\u0E48\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34", cls: "bg-rose-100 text-rose-700" }
+  };
+  const s = map[status] || map.pending;
+  return /* @__PURE__ */ jsx("span", { className: `text-xs font-medium px-2 py-1 rounded-full ${s.cls}`, children: s.label });
+}
+function App() {
+  const [data, setData] = useState(null);
+  const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState("clock");
+  const [session, setSession] = useState(null);
+  const [showNotif, setShowNotif] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  useEffect(() => {
+    const id = "hr-app-display-font";
+    if (!document.getElementById(id)) {
+      const link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&display=swap";
+      document.head.appendChild(link);
+    }
+  }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get(STORAGE_KEY, true);
+        if (res && res.value) {
+          const parsed = JSON.parse(res.value);
+          parsed.notifications = parsed.notifications || [];
+          parsed.payrollPaid = parsed.payrollPaid || {};
+          parsed.adminPin = parsed.adminPin || "0000";
+          parsed.requests = parsed.requests || [];
+          parsed.holidays = parsed.holidays || [];
+          parsed.rules = parsed.rules || [];
+          parsed.employees = (parsed.employees || []).map((e) => ({ ...e, pin: e.pin || last4(e.phone), leaveQuota: e.leaveQuota || { ...DEFAULT_LEAVE_QUOTA } }));
+          setData(parsed);
+        } else {
+          const seeded = seedData();
+          setData(seeded);
+          await window.storage.set(STORAGE_KEY, JSON.stringify(seeded), true);
+        }
+      } catch (e) {
+        const seeded = seedData();
+        setData(seeded);
+        try {
+          await window.storage.set(STORAGE_KEY, JSON.stringify(seeded), true);
+        } catch (e2) {
+        }
+      }
+      setReady(true);
+    })();
+  }, []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const firstSaveRef = useRef(true);
+  const isSavingRef = useRef(false);
+  const skipNextSaveRef = useRef(false);
+  useEffect(() => {
+    if (!ready || !data) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    const isFirstSave = firstSaveRef.current;
+    firstSaveRef.current = false;
+    setIsSaving(true);
+    isSavingRef.current = true;
+    window.storage.set(STORAGE_KEY, JSON.stringify(data), true).then(() => {
+      if (!isFirstSave) {
+        setShowSavedToast(true);
+        setTimeout(() => setShowSavedToast(false), 1600);
+      }
+    }).catch(() => {
+    }).finally(() => {
+      setIsSaving(false);
+      isSavingRef.current = false;
+    });
+  }, [data, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    const interval = setInterval(async () => {
+      if (isSavingRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        const res = await window.storage.get(STORAGE_KEY, true);
+        if (res && res.value) {
+          setData((prev) => {
+            if (JSON.stringify(prev) === res.value) return prev;
+            skipNextSaveRef.current = true;
+            return JSON.parse(res.value);
+          });
+        }
+      } catch (e) {
+      }
+    }, 6e3);
+    return () => clearInterval(interval);
+  }, [ready]);
+  function notify(toUserId, message) {
+    setData((prev) => ({
+      ...prev,
+      notifications: [...prev.notifications, { id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, toUserId, message, date: nowStamp(), read: false }]
+    }));
+  }
+  if (!ready || !data) {
+    return /* @__PURE__ */ jsx("div", { className: "min-h-screen bg-stone-50 flex items-center justify-center", children: /* @__PURE__ */ jsx("div", { className: "text-stone-400 text-sm", children: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14..." }) });
+  }
+  if (!session) {
+    return /* @__PURE__ */ jsx(LoginScreen, { employees: data.employees, adminPin: data.adminPin, onLogin: setSession });
+  }
+  const currentUser = session.isAdmin ? null : data.employees.find((e) => e.id === session.id);
+  const recipientId = session.isAdmin ? "admin" : session.id;
+  const myNotifs = data.notifications.filter((n) => n.toUserId === recipientId).sort((a, b) => b.date.localeCompare(a.date));
+  const unreadCount = myNotifs.filter((n) => !n.read).length;
+  function markAllRead() {
+    setData((prev) => ({
+      ...prev,
+      notifications: prev.notifications.map((n) => n.toUserId === recipientId ? { ...n, read: true } : n)
+    }));
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "min-h-screen bg-stone-50 md:flex", children: [
+    /* @__PURE__ */ jsx(Sidebar, { tab, setTab, isAdmin: session.isAdmin, currentUser, onLogout: () => setSession(null) }),
+    /* @__PURE__ */ jsx("div", { className: "flex-1 flex justify-center", children: /* @__PURE__ */ jsxs("div", { className: "w-full max-w-md md:max-w-3xl bg-stone-50 min-h-screen relative pb-20 md:pb-10", children: [
+      /* @__PURE__ */ jsx(
+        Header,
+        {
+          currentUser,
+          isAdmin: session.isAdmin,
+          unreadCount,
+          isSaving,
+          onOpenNotif: () => setShowNotif(true),
+          onOpenSettings: () => setShowSettings(true),
+          onLogout: () => setSession(null)
+        }
+      ),
+      /* @__PURE__ */ jsxs("main", { className: "px-4 pt-4 md:px-8 md:pt-6 md:max-w-xl md:mx-auto", children: [
+        tab === "clock" && (session.isAdmin ? /* @__PURE__ */ jsx(AdminClockOverview, { data }) : /* @__PURE__ */ jsx(ClockTab, { data, setData, currentUser })),
+        tab === "leave" && /* @__PURE__ */ jsx(LeaveTab, { data, setData, currentUser, isAdmin: session.isAdmin, notify }),
+        tab === "requests" && /* @__PURE__ */ jsx(RequestsTab, { data, setData, currentUser, isAdmin: session.isAdmin, notify }),
+        tab === "people" && /* @__PURE__ */ jsx(PeopleTab, { data, setData, isAdmin: session.isAdmin, currentUser }),
+        tab === "payroll" && /* @__PURE__ */ jsx(PayrollTab, { data, setData, currentUser, isAdmin: session.isAdmin, notify })
+      ] }),
+      /* @__PURE__ */ jsx(BottomNav, { tab, setTab }),
+      /* @__PURE__ */ jsx(SavedToast, { show: showSavedToast }),
+      showNotif && /* @__PURE__ */ jsx(NotificationsPanel, { notifs: myNotifs, onClose: () => {
+        markAllRead();
+        setShowNotif(false);
+      } }),
+      showSettings && /* @__PURE__ */ jsx(
+        AdminSettingsModal,
+        {
+          adminPin: data.adminPin,
+          data,
+          setData,
+          onSave: (newPin) => {
+            setData((prev) => ({ ...prev, adminPin: newPin }));
+            setShowSettings(false);
+          },
+          onClose: () => setShowSettings(false)
+        }
+      )
+    ] }) })
+  ] });
+}
+function LoginScreen({ employees, adminPin, onLogin }) {
+  const [target, setTarget] = useState(null);
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
+  function submit() {
+    if (target.isAdminLogin) {
+      if (pin === adminPin) onLogin({ id: null, isAdmin: true });
+      else {
+        setError(true);
+        setPin("");
+      }
+    } else {
+      if (pin === target.pin) onLogin({ id: target.id, isAdmin: false });
+      else {
+        setError(true);
+        setPin("");
+      }
+    }
+  }
+  if (target) {
+    return /* @__PURE__ */ jsx("div", { className: "min-h-screen bg-stone-900 flex items-center justify-center px-6", children: /* @__PURE__ */ jsxs("div", { className: "w-full max-w-xs", children: [
+      /* @__PURE__ */ jsxs("button", { onClick: () => {
+        setTarget(null);
+        setPin("");
+        setError(false);
+      }, className: "text-stone-400 text-sm flex items-center gap-1 mb-6", children: [
+        /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }),
+        " \u0E01\u0E25\u0E31\u0E1A"
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex flex-col items-center mb-6", children: [
+        target.isAdminLogin ? /* @__PURE__ */ jsx("div", { className: "w-16 h-16 rounded-full bg-amber-500 flex items-center justify-center mb-3", children: /* @__PURE__ */ jsx(ShieldCheck, { size: 26, className: "text-stone-900" }) }) : /* @__PURE__ */ jsx(Avatar, { emp: target, size: "w-16 h-16", textSize: "text-xl" }),
+        /* @__PURE__ */ jsx("p", { className: "text-white text-lg mt-3", style: displayFont, children: target.isAdminLogin ? "\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" : target.name }),
+        /* @__PURE__ */ jsx("p", { className: "text-stone-400 text-xs mt-1", children: "\u0E01\u0E23\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A PIN 4 \u0E2B\u0E25\u0E31\u0E01" })
+      ] }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          autoFocus: true,
+          type: "password",
+          inputMode: "numeric",
+          maxLength: 4,
+          value: pin,
+          onChange: (e) => {
+            setPin(e.target.value.replace(/\D/g, "").slice(0, 4));
+            setError(false);
+          },
+          className: "w-full text-center text-2xl tracking-[0.5em] bg-stone-800 text-white rounded-2xl py-3.5 mb-3 outline-none focus:ring-2 focus:ring-amber-500",
+          placeholder: "\u2022\u2022\u2022\u2022"
+        }
+      ),
+      error && /* @__PURE__ */ jsx("p", { className: "text-rose-400 text-xs text-center mb-3", children: "\u0E23\u0E2B\u0E31\u0E2A PIN \u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" }),
+      /* @__PURE__ */ jsxs(
+        "button",
+        {
+          onClick: submit,
+          disabled: pin.length !== 4,
+          className: "w-full bg-amber-500 disabled:opacity-30 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm flex items-center justify-center gap-2",
+          children: [
+            /* @__PURE__ */ jsx(Lock, { size: 15 }),
+            " \u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A"
+          ]
+        }
+      )
+    ] }) });
+  }
+  return /* @__PURE__ */ jsx("div", { className: "min-h-screen bg-stone-900 flex justify-center", children: /* @__PURE__ */ jsxs("div", { className: "w-full max-w-md px-6 pt-16 pb-10", children: [
+    /* @__PURE__ */ jsx("p", { className: "text-amber-500 text-[11px] font-semibold tracking-[0.15em] uppercase", children: "NSD & Propster Studio \xB7 \u0E23\u0E30\u0E1A\u0E1A\u0E1A\u0E38\u0E04\u0E04\u0E25" }),
+    /* @__PURE__ */ jsx("h1", { className: "text-white text-3xl mt-1 mb-1", style: displayFont, children: "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E02\u0E2D\u0E07\u0E04\u0E38\u0E13" }),
+    /* @__PURE__ */ jsx("p", { className: "text-stone-400 text-xs mb-6", children: "\u0E41\u0E15\u0E48\u0E25\u0E30\u0E04\u0E19\u0E40\u0E2B\u0E47\u0E19\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E02\u0E2D\u0E07\u0E15\u0E31\u0E27\u0E40\u0E2D\u0E07 \u0E15\u0E49\u0E2D\u0E07\u0E43\u0E2A\u0E48 PIN \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E40\u0E02\u0E49\u0E32\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19" }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-2 mb-6", children: employees.map((e) => /* @__PURE__ */ jsxs(
+      "button",
+      {
+        onClick: () => setTarget(e),
+        className: "w-full flex items-center gap-3 bg-stone-800 hover:bg-stone-700 rounded-2xl p-3 transition",
+        children: [
+          /* @__PURE__ */ jsx(Avatar, { emp: e }),
+          /* @__PURE__ */ jsxs("div", { className: "text-left flex-1", children: [
+            /* @__PURE__ */ jsx("p", { className: "text-sm font-medium text-white", children: e.name }),
+            /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: e.position })
+          ] }),
+          /* @__PURE__ */ jsx(KeyRound, { size: 15, className: "text-stone-500" })
+        ]
+      },
+      e.id
+    )) }),
+    /* @__PURE__ */ jsxs(
+      "button",
+      {
+        onClick: () => setTarget({ isAdminLogin: true }),
+        className: "w-full flex items-center gap-3 bg-amber-500 rounded-2xl p-3.5",
+        children: [
+          /* @__PURE__ */ jsx(ShieldCheck, { size: 20, className: "text-stone-900" }),
+          /* @__PURE__ */ jsx("span", { className: "text-sm font-semibold text-stone-900 flex-1 text-left", children: "\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" }),
+          /* @__PURE__ */ jsx(ChevronRight, { size: 16, className: "text-stone-900" })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsx("p", { className: "text-stone-500 text-[11px] mt-6 text-center leading-relaxed", children: "\u0E43\u0E0A\u0E49 PIN \u0E17\u0E35\u0E48\u0E04\u0E38\u0E13\u0E15\u0E31\u0E49\u0E07\u0E44\u0E27\u0E49 \xB7 \u0E2B\u0E32\u0E01\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E04\u0E22\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19 \u0E43\u0E2B\u0E49\u0E43\u0E0A\u0E49\u0E40\u0E25\u0E02 4 \u0E15\u0E31\u0E27\u0E17\u0E49\u0E32\u0E22\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23\u0E02\u0E2D\u0E07\u0E04\u0E38\u0E13 (\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E15\u0E31\u0E49\u0E07\u0E44\u0E27\u0E49\u0E15\u0E2D\u0E19\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E1A\u0E31\u0E0D\u0E0A\u0E35)" })
+  ] }) });
+}
+function SavedToast({ show }) {
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      className: `fixed left-1/2 -translate-x-1/2 z-40 transition-all duration-300 ${show ? "bottom-24 opacity-100" : "bottom-16 opacity-0 pointer-events-none"} md:bottom-8`,
+      children: /* @__PURE__ */ jsxs("div", { className: "bg-stone-900 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2", children: [
+        /* @__PURE__ */ jsx(CircleCheck, { size: 16, className: "text-emerald-400" }),
+        " \u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E40\u0E23\u0E35\u0E22\u0E1A\u0E23\u0E49\u0E2D\u0E22\u0E41\u0E25\u0E49\u0E27"
+      ] })
+    }
+  );
+}
+function Header({ currentUser, isAdmin, unreadCount, isSaving, onOpenNotif, onOpenSettings, onLogout }) {
+  return /* @__PURE__ */ jsx("header", { className: "bg-stone-900 text-white px-4 pt-5 pb-4 rounded-b-3xl sticky top-0 z-20", children: /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between", children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2.5", children: [
+      isAdmin ? /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center", children: /* @__PURE__ */ jsx(ShieldCheck, { size: 16, className: "text-stone-900" }) }) : /* @__PURE__ */ jsx(Avatar, { emp: currentUser, size: "w-9 h-9", textSize: "text-xs" }),
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsxs("p", { className: "text-[10px] text-amber-500 tracking-[0.15em] uppercase flex items-center gap-1.5", children: [
+          isAdmin ? "\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" : "\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19",
+          isSaving && /* @__PURE__ */ jsxs("span", { className: "normal-case tracking-normal text-stone-400 flex items-center gap-1", children: [
+            /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" }),
+            " \u0E01\u0E33\u0E25\u0E31\u0E07\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01..."
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx("h1", { className: "text-base leading-tight", style: displayFont, children: isAdmin ? "\u0E41\u0E1C\u0E07\u0E04\u0E27\u0E1A\u0E04\u0E38\u0E21 HR" : currentUser?.name })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+      isAdmin && /* @__PURE__ */ jsx("button", { onClick: onOpenSettings, className: "bg-stone-800 w-9 h-9 rounded-full flex items-center justify-center", children: /* @__PURE__ */ jsx(Settings, { size: 15, className: "text-stone-300" }) }),
+      /* @__PURE__ */ jsxs("button", { onClick: onOpenNotif, className: "relative bg-stone-800 w-9 h-9 rounded-full flex items-center justify-center", children: [
+        /* @__PURE__ */ jsx(Bell, { size: 16, className: "text-stone-300" }),
+        unreadCount > 0 && /* @__PURE__ */ jsx("span", { className: "absolute -top-0.5 -right-0.5 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center", children: unreadCount > 9 ? "9+" : unreadCount })
+      ] }),
+      /* @__PURE__ */ jsx("button", { onClick: onLogout, className: "bg-stone-800 w-9 h-9 rounded-full flex items-center justify-center", children: /* @__PURE__ */ jsx(LogOutIcon, { size: 15, className: "text-stone-300" }) })
+    ] })
+  ] }) });
+}
+function AdminSettingsModal({ adminPin, data, setData, onSave, onClose }) {
+  const [section, setSection] = useState("general");
+  return /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 bg-white z-30 flex flex-col", children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between px-4 pt-5 pb-3 border-b border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-bold text-stone-800 flex items-center gap-2", children: [
+        /* @__PURE__ */ jsx(Settings, { size: 16 }),
+        " \u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E23\u0E30\u0E1A\u0E1A"
+      ] }),
+      /* @__PURE__ */ jsx("button", { onClick: onClose, className: "w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center", children: /* @__PURE__ */ jsx(X, { size: 15, className: "text-stone-500" }) })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "flex gap-2 px-4 pt-3 pb-2", children: [["general", "\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B"], ["holidays", "\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14"], ["rules", "\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A"]].map(([id, label]) => /* @__PURE__ */ jsx("button", { onClick: () => setSection(id), className: `px-3 py-1.5 rounded-full text-xs font-medium ${section === id ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-500"}`, children: label }, id)) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex-1 overflow-y-auto px-4 pb-8", children: [
+      section === "general" && /* @__PURE__ */ jsx(GeneralSettingsSection, { adminPin, data, setData, onSave }),
+      section === "holidays" && /* @__PURE__ */ jsx(HolidaysSection, { data, setData }),
+      section === "rules" && /* @__PURE__ */ jsx(RulesSection, { data, setData })
+    ] })
+  ] });
+}
+function GeneralSettingsSection({ adminPin, data, setData, onSave }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
+  function submit() {
+    if (current !== adminPin) return setError("\u0E23\u0E2B\u0E31\u0E2A\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+    if (next.length !== 4) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 4 \u0E2B\u0E25\u0E31\u0E01");
+    if (next !== confirm) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E17\u0E31\u0E49\u0E07\u0E2A\u0E2D\u0E07\u0E0A\u0E48\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E19");
+    onSave(next);
+  }
+  function resetAllData() {
+    setData(seedData());
+    setConfirmReset(false);
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 font-medium mb-2 flex items-center gap-1.5", children: [
+      /* @__PURE__ */ jsx(Download, { size: 12 }),
+      " \u0E2A\u0E48\u0E07\u0E2D\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E40\u0E1B\u0E47\u0E19 Excel"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-5", children: [
+      /* @__PURE__ */ jsxs("button", { onClick: () => exportEmployeesXlsx(data), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E23\u0E32\u0E22\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19 + \u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19" }),
+        /* @__PURE__ */ jsx(Download, { size: 14, className: "text-stone-400" })
+      ] }),
+      /* @__PURE__ */ jsxs("button", { onClick: () => exportAttendanceXlsx(data), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E19\u0E35\u0E49" }),
+        /* @__PURE__ */ jsx(Download, { size: 14, className: "text-stone-400" })
+      ] }),
+      /* @__PURE__ */ jsxs("button", { onClick: () => exportPayrollXlsx(data), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E19\u0E35\u0E49" }),
+        /* @__PURE__ */ jsx(Download, { size: 14, className: "text-stone-400" })
+      ] }),
+      /* @__PURE__ */ jsxs("button", { onClick: () => exportRequestsXlsx(data), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14" }),
+        /* @__PURE__ */ jsx(Download, { size: 14, className: "text-stone-400" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium mb-1", children: "\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E23\u0E2B\u0E31\u0E2A PIN \u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-2", children: [
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: current, onChange: (e) => setCurrent(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "PIN \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" }),
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: next, onChange: (e) => setNext(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "PIN \u0E43\u0E2B\u0E21\u0E48 (4 \u0E2B\u0E25\u0E31\u0E01)", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" }),
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: confirm, onChange: (e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19 PIN \u0E43\u0E2B\u0E21\u0E48", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" })
+    ] }),
+    error && /* @__PURE__ */ jsx("p", { className: "text-rose-500 text-xs mb-3", children: error }),
+    /* @__PURE__ */ jsx("button", { onClick: submit, className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm mt-2", children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01 PIN \u0E43\u0E2B\u0E21\u0E48" }),
+    /* @__PURE__ */ jsxs("div", { className: "mt-8 pt-5 border-t border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-xs text-rose-500 font-semibold mb-2", children: "\u0E42\u0E0B\u0E19\u0E2D\u0E31\u0E19\u0E15\u0E23\u0E32\u0E22" }),
+      !confirmReset ? /* @__PURE__ */ jsxs("button", { onClick: () => setConfirmReset(true), className: "w-full flex items-center justify-between bg-rose-50 rounded-xl px-3 py-2.5 text-sm text-rose-600", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E23\u0E35\u0E40\u0E0B\u0E47\u0E15\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 \u0E01\u0E25\u0E31\u0E1A\u0E2A\u0E39\u0E48\u0E04\u0E48\u0E32\u0E40\u0E23\u0E34\u0E48\u0E21\u0E15\u0E49\u0E19" }),
+        /* @__PURE__ */ jsx(RefreshCw, { size: 14 })
+      ] }) : /* @__PURE__ */ jsxs("div", { className: "bg-rose-50 rounded-xl p-3 space-y-2", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-xs text-rose-700", children: "\u0E41\u0E19\u0E48\u0E43\u0E08\u0E19\u0E30\u0E04\u0E23\u0E31\u0E1A? \u0E01\u0E32\u0E23\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32 \u0E04\u0E33\u0E02\u0E2D\u0E25\u0E32 \u0E23\u0E32\u0E22\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19 \u0E41\u0E25\u0E30\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E2D\u0E37\u0E48\u0E19\u0E46 \u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E08\u0E30\u0E16\u0E39\u0E01\u0E25\u0E1A\u0E41\u0E25\u0E30\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E14\u0E49\u0E27\u0E22\u0E23\u0E32\u0E22\u0E0A\u0E37\u0E48\u0E2D\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E15\u0E31\u0E49\u0E07\u0E15\u0E49\u0E19 \u0E01\u0E32\u0E23\u0E01\u0E23\u0E30\u0E17\u0E33\u0E19\u0E35\u0E49\u0E22\u0E49\u0E2D\u0E19\u0E01\u0E25\u0E31\u0E1A\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49" }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsx("button", { onClick: () => setConfirmReset(false), className: "flex-1 bg-white border border-stone-200 text-stone-600 text-xs font-medium py-2 rounded-lg", children: "\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01" }),
+          /* @__PURE__ */ jsx("button", { onClick: resetAllData, className: "flex-1 bg-rose-500 text-white text-xs font-medium py-2 rounded-lg", children: "\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E23\u0E35\u0E40\u0E0B\u0E47\u0E15" })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+function HolidaysSection({ data, setData }) {
+  const [date, setDate] = useState("");
+  const [name, setName] = useState("");
+  const sorted = [...data.holidays].sort((a, b) => a.date.localeCompare(b.date));
+  function addHoliday() {
+    if (!date || !name.trim()) return;
+    setData((prev) => ({ ...prev, holidays: [...prev.holidays, { id: `h-${Date.now()}`, date, name: name.trim() }] }));
+    setDate("");
+    setName("");
+  }
+  function removeHoliday(id) {
+    setData((prev) => ({ ...prev, holidays: prev.holidays.filter((h) => h.id !== id) }));
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium mb-2", children: "\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E1B\u0E23\u0E30\u0E08\u0E33\u0E1B\u0E35" }),
+    /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-2", children: /* @__PURE__ */ jsx("input", { type: "date", value: date, onChange: (e) => setDate(e.target.value), className: "flex-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-5", children: [
+      /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: "\u0E0A\u0E37\u0E48\u0E2D\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14 \u0E40\u0E0A\u0E48\u0E19 \u0E27\u0E31\u0E19\u0E2A\u0E07\u0E01\u0E23\u0E32\u0E19\u0E15\u0E4C", className: "flex-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("button", { onClick: addHoliday, className: "bg-stone-900 text-white rounded-xl px-4", children: /* @__PURE__ */ jsx(Plus, { size: 16 }) })
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 font-medium mb-2", children: [
+      "\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (",
+      sorted.length,
+      ")"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-1.5", children: [
+      sorted.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-300", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E17\u0E35\u0E48\u0E15\u0E31\u0E49\u0E07\u0E44\u0E27\u0E49" }),
+      sorted.map((h) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5", children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("p", { className: "text-sm text-stone-700 font-medium", children: h.name }),
+          /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: formatThaiDate(h.date) })
+        ] }),
+        /* @__PURE__ */ jsx("button", { onClick: () => removeHoliday(h.id), children: /* @__PURE__ */ jsx(Trash2, { size: 14, className: "text-rose-400" }) })
+      ] }, h.id))
+    ] })
+  ] });
+}
+function RulesSection({ data, setData }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  function addRule() {
+    if (!title.trim()) return;
+    setData((prev) => ({ ...prev, rules: [...prev.rules, { id: `r-${Date.now()}`, title: title.trim(), description: description.trim() }] }));
+    setTitle("");
+    setDescription("");
+  }
+  function removeRule(id) {
+    setData((prev) => ({ ...prev, rules: prev.rules.filter((r) => r.id !== id) }));
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium mb-2", children: "\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A" }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-5", children: [
+      /* @__PURE__ */ jsx("input", { value: title, onChange: (e) => setTitle(e.target.value), placeholder: "\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D \u0E40\u0E0A\u0E48\u0E19 \u0E40\u0E27\u0E25\u0E32\u0E17\u0E33\u0E07\u0E32\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("textarea", { value: description, onChange: (e) => setDescription(e.target.value), rows: 2, placeholder: "\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm resize-none" }),
+      /* @__PURE__ */ jsxs("button", { onClick: addRule, className: "w-full bg-stone-900 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5", children: [
+        /* @__PURE__ */ jsx(Plus, { size: 15 }),
+        " \u0E40\u0E1E\u0E34\u0E48\u0E21\u0E01\u0E0E"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 font-medium mb-2", children: [
+      "\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (",
+      data.rules.length,
+      ")"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2", children: [
+      data.rules.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-300", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A\u0E17\u0E35\u0E48\u0E15\u0E31\u0E49\u0E07\u0E44\u0E27\u0E49" }),
+      data.rules.map((r) => /* @__PURE__ */ jsxs("div", { className: "bg-stone-50 rounded-xl px-3 py-2.5", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-2", children: [
+          /* @__PURE__ */ jsx("p", { className: "text-sm text-stone-700 font-medium", children: r.title }),
+          /* @__PURE__ */ jsx("button", { onClick: () => removeRule(r.id), children: /* @__PURE__ */ jsx(Trash2, { size: 14, className: "text-rose-400 shrink-0" }) })
+        ] }),
+        r.description && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-500 mt-1", children: r.description })
+      ] }, r.id))
+    ] })
+  ] });
+}
+function NotificationsPanel({ notifs, onClose }) {
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-4 pb-8 max-h-[75vh] overflow-y-auto", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: "\u0E01\u0E32\u0E23\u0E41\u0E08\u0E49\u0E07\u0E40\u0E15\u0E37\u0E2D\u0E19" }),
+    notifs.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 text-center py-8", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E32\u0E23\u0E41\u0E08\u0E49\u0E07\u0E40\u0E15\u0E37\u0E2D\u0E19" }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-2", children: notifs.map((n) => /* @__PURE__ */ jsxs("div", { className: `flex items-start gap-2.5 p-3 rounded-xl ${n.read ? "bg-stone-50" : "bg-amber-50"}`, children: [
+      /* @__PURE__ */ jsx(Bell, { size: 14, className: `mt-0.5 ${n.read ? "text-stone-300" : "text-amber-500"}` }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm text-stone-700", children: n.message }),
+        /* @__PURE__ */ jsx("p", { className: "text-[11px] text-stone-400 mt-0.5", children: timeAgo(n.date) })
+      ] })
+    ] }, n.id)) })
+  ] }) });
+}
+function BottomNav({ tab, setTab }) {
+  return /* @__PURE__ */ jsx("nav", { className: "md:hidden fixed bottom-0 left-0 right-0 flex justify-center z-20", children: /* @__PURE__ */ jsx("div", { className: "w-full max-w-md bg-white border-t border-stone-200 flex px-2 py-2", children: NAV_ITEMS.map((it) => {
+    const Icon = it.icon;
+    const active = tab === it.id;
+    return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(it.id), className: "flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl transition", children: [
+      /* @__PURE__ */ jsx(Icon, { size: 20, className: active ? "text-amber-500" : "text-stone-400", strokeWidth: active ? 2.5 : 2 }),
+      /* @__PURE__ */ jsx("span", { className: `text-[11px] font-medium ${active ? "text-stone-900" : "text-stone-400"}`, children: it.label })
+    ] }, it.id);
+  }) }) });
+}
+function Sidebar({ tab, setTab, isAdmin, currentUser, onLogout }) {
+  return /* @__PURE__ */ jsxs("aside", { className: "hidden md:flex md:flex-col md:w-64 md:shrink-0 bg-stone-900 text-white sticky top-0 h-screen px-5 py-6", children: [
+    /* @__PURE__ */ jsxs("div", { className: "mb-8", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-amber-500 text-[10px] font-semibold tracking-[0.15em] uppercase", children: "NSD & Propster" }),
+      /* @__PURE__ */ jsx("p", { className: "text-xl mt-0.5", style: displayFont, children: "Studio HR" })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2.5 mb-6 pb-6 border-b border-stone-800", children: [
+      isAdmin ? /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center", children: /* @__PURE__ */ jsx(ShieldCheck, { size: 16, className: "text-stone-900" }) }) : /* @__PURE__ */ jsx(Avatar, { emp: currentUser, size: "w-9 h-9", textSize: "text-xs" }),
+      /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-[10px] text-stone-400 tracking-wide", children: isAdmin ? "\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" : "\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19" }),
+        /* @__PURE__ */ jsx("p", { className: "text-sm font-medium truncate", children: isAdmin ? "\u0E41\u0E1C\u0E07\u0E04\u0E27\u0E1A\u0E04\u0E38\u0E21 HR" : currentUser?.name })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("nav", { className: "flex-1 space-y-1", children: NAV_ITEMS.map((it) => {
+      const Icon = it.icon;
+      const active = tab === it.id;
+      return /* @__PURE__ */ jsxs(
+        "button",
+        {
+          onClick: () => setTab(it.id),
+          className: `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? "bg-amber-500 text-stone-900 font-semibold" : "text-stone-300 hover:bg-stone-800"}`,
+          children: [
+            /* @__PURE__ */ jsx(Icon, { size: 17 }),
+            " ",
+            it.label
+          ]
+        },
+        it.id
+      );
+    }) }),
+    /* @__PURE__ */ jsxs("button", { onClick: onLogout, className: "flex items-center gap-2 text-stone-400 hover:text-white text-sm px-3 py-2.5 rounded-xl hover:bg-stone-800 transition", children: [
+      /* @__PURE__ */ jsx(LogOutIcon, { size: 15 }),
+      " \u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E23\u0E30\u0E1A\u0E1A"
+    ] })
+  ] });
+}
+function ClockTab({ data, setData, currentUser }) {
+  const today = todayStr();
+  const todayRecord = data.attendance.find((a) => a.employeeId === currentUser.id && a.date === today);
+  const mk = monthKey(today);
+  const monthRecords = data.attendance.filter((a) => a.employeeId === currentUser.id && monthKey(a.date) === mk);
+  const totalHours = monthRecords.reduce((sum, r) => r.clockOut ? sum + hoursBetween(r.clockIn, r.clockOut) : sum, 0);
+  const totalOT = monthRecords.reduce((sum, r) => {
+    if (!r.clockOut) return sum;
+    return sum + Math.max(0, hoursBetween(r.clockIn, r.clockOut) - 8);
+  }, 0);
+  const daysPresent = monthRecords.length;
+  const todayHoliday = data.holidays.find((h) => h.date === today);
+  function handleClock() {
+    setData((prev) => {
+      const list = [...prev.attendance];
+      const idx = list.findIndex((a) => a.employeeId === currentUser.id && a.date === today);
+      if (idx === -1) list.push({ id: `att-${Date.now()}`, employeeId: currentUser.id, date: today, clockIn: nowTimeStr(), clockOut: null, project: "" });
+      else if (!list[idx].clockOut) list[idx] = { ...list[idx], clockOut: nowTimeStr() };
+      return { ...prev, attendance: list };
+    });
+  }
+  function updateProject(text) {
+    setData((prev) => ({
+      ...prev,
+      attendance: prev.attendance.map((a) => a.employeeId === currentUser.id && a.date === today ? { ...a, project: text } : a)
+    }));
+  }
+  const state = !todayRecord ? "before" : !todayRecord.clockOut ? "in" : "done";
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    todayHoliday && /* @__PURE__ */ jsxs("div", { className: "bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsx(Sparkles, { size: 15, className: "text-amber-500" }),
+      /* @__PURE__ */ jsxs("p", { className: "text-sm text-amber-700 font-medium", children: [
+        "\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49\u0E40\u0E1B\u0E47\u0E19\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17: ",
+        todayHoliday.name
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-3xl p-5 border-2 border-dashed border-stone-200 relative overflow-hidden", children: [
+      /* @__PURE__ */ jsx("div", { className: "absolute -left-3 top-1/2 -transtone-y-1/2 w-6 h-6 bg-stone-50 rounded-full" }),
+      /* @__PURE__ */ jsx("div", { className: "absolute -right-3 top-1/2 -transtone-y-1/2 w-6 h-6 bg-stone-50 rounded-full" }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium", children: formatThaiDate(today) }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mt-3", children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E40\u0E02\u0E49\u0E32\u0E07\u0E32\u0E19" }),
+          /* @__PURE__ */ jsx("p", { className: "text-2xl font-bold text-stone-900 tabular-nums", children: todayRecord?.clockIn || "--:--" })
+        ] }),
+        /* @__PURE__ */ jsx(ChevronRight, { size: 18, className: "text-stone-300" }),
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E2D\u0E2D\u0E01\u0E07\u0E32\u0E19" }),
+          /* @__PURE__ */ jsx("p", { className: "text-2xl font-bold text-stone-900 tabular-nums", children: todayRecord?.clockOut || "--:--" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs(
+        "button",
+        {
+          onClick: handleClock,
+          disabled: state === "done",
+          className: `w-full mt-5 rounded-2xl py-4 flex items-center justify-center gap-2 font-semibold text-sm transition ${state === "before" ? "bg-amber-500 text-stone-900 active:scale-[0.98]" : state === "in" ? "bg-stone-900 text-white active:scale-[0.98]" : "bg-emerald-50 text-emerald-600"}`,
+          children: [
+            state === "before" && /* @__PURE__ */ jsxs(Fragment, { children: [
+              /* @__PURE__ */ jsx(LogIn, { size: 18 }),
+              " \u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E40\u0E02\u0E49\u0E32\u0E07\u0E32\u0E19"
+            ] }),
+            state === "in" && /* @__PURE__ */ jsxs(Fragment, { children: [
+              /* @__PURE__ */ jsx(LogOut, { size: 18 }),
+              " \u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E2D\u0E2D\u0E01\u0E07\u0E32\u0E19"
+            ] }),
+            state === "done" && /* @__PURE__ */ jsxs(Fragment, { children: [
+              /* @__PURE__ */ jsx(Check, { size: 18 }),
+              " \u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E04\u0E23\u0E1A\u0E41\u0E25\u0E49\u0E27\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49"
+            ] })
+          ]
+        }
+      ),
+      todayRecord && /* @__PURE__ */ jsxs("div", { className: "mt-4 pt-4 border-t border-dashed border-stone-200", children: [
+        /* @__PURE__ */ jsxs("label", { className: "text-xs text-stone-400 font-medium flex items-center gap-1.5 mb-1.5", children: [
+          /* @__PURE__ */ jsx(Briefcase, { size: 12 }),
+          " \u0E07\u0E32\u0E19/\u0E42\u0E1B\u0E23\u0E40\u0E08\u0E04\u0E17\u0E35\u0E48\u0E17\u0E33\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49"
+        ] }),
+        /* @__PURE__ */ jsx(
+          "textarea",
+          {
+            defaultValue: todayRecord.project || "",
+            onBlur: (e) => updateProject(e.target.value),
+            rows: 2,
+            placeholder: "\u0E40\u0E0A\u0E48\u0E19 \u0E17\u0E33\u0E2B\u0E19\u0E49\u0E32\u0E40\u0E27\u0E47\u0E1A Landing Page, \u0E1B\u0E34\u0E14\u0E22\u0E2D\u0E14\u0E02\u0E32\u0E22\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32 A...",
+            className: "w-full border border-stone-200 rounded-xl px-3 py-2 text-sm resize-none"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: [
+        "\u0E2A\u0E23\u0E38\u0E1B\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E19\u0E35\u0E49 (",
+        monthLabel(mk),
+        ")"
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 gap-2", children: [
+        /* @__PURE__ */ jsx(SummaryStat, { label: "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E21\u0E32", value: daysPresent, unit: "\u0E27\u0E31\u0E19" }),
+        /* @__PURE__ */ jsx(SummaryStat, { label: "\u0E0A\u0E21.\u0E17\u0E33\u0E07\u0E32\u0E19\u0E23\u0E27\u0E21", value: totalHours.toFixed(1), unit: "\u0E0A\u0E21." }),
+        /* @__PURE__ */ jsx(SummaryStat, { label: "\u0E42\u0E2D\u0E17\u0E35", value: totalOT.toFixed(1), unit: "\u0E0A\u0E21.", accent: true })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: "\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14" }),
+      monthRecords.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E32\u0E23\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E19\u0E35\u0E49" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-3", children: [...monthRecords].reverse().slice(0, 8).map((r) => {
+        const h = r.clockOut ? hoursBetween(r.clockIn, r.clockOut) : null;
+        const ot = h ? Math.max(0, h - 8) : 0;
+        return /* @__PURE__ */ jsxs("div", { className: "pb-2.5 border-b border-stone-50 last:border-0", children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm", children: [
+            /* @__PURE__ */ jsx("span", { className: "text-stone-500 text-xs", children: formatThaiDate(r.date) }),
+            /* @__PURE__ */ jsxs("span", { className: "text-stone-700 tabular-nums", children: [
+              r.clockIn,
+              " - ",
+              r.clockOut || "..."
+            ] }),
+            ot > 0 ? /* @__PURE__ */ jsxs("span", { className: "text-amber-600 text-xs font-medium", children: [
+              "OT ",
+              ot.toFixed(1),
+              "\u0E0A\u0E21."
+            ] }) : /* @__PURE__ */ jsx("span", { className: "text-stone-300 text-xs", children: "-" })
+          ] }),
+          r.project && /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 mt-1", children: [
+            "\u{1F4CB} ",
+            r.project
+          ] })
+        ] }, r.id);
+      }) })
+    ] })
+  ] });
+}
+function SummaryStat({ label, value, unit, accent }) {
+  return /* @__PURE__ */ jsxs("div", { className: "text-center bg-stone-50 rounded-xl py-3", children: [
+    /* @__PURE__ */ jsx("p", { className: `text-lg font-bold tabular-nums ${accent ? "text-amber-600" : "text-stone-900"}`, children: value }),
+    /* @__PURE__ */ jsxs("p", { className: "text-[10px] text-stone-400 mt-0.5", children: [
+      label,
+      " (",
+      unit,
+      ")"
+    ] })
+  ] });
+}
+function AdminClockOverview({ data }) {
+  const today = todayStr();
+  const records = data.attendance.filter((a) => a.date === today);
+  const clockedIn = records.length;
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-1", children: formatThaiDate(today) }),
+      /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400", children: [
+        "\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32\u0E41\u0E25\u0E49\u0E27 ",
+        clockedIn,
+        " / ",
+        data.employees.length,
+        " \u0E04\u0E19"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-2", children: data.employees.map((emp) => {
+      const r = records.find((a) => a.employeeId === emp.id);
+      return /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-3.5 border border-stone-100 flex items-center gap-3", children: [
+        /* @__PURE__ */ jsx(Avatar, { emp, size: "w-10 h-10" }),
+        /* @__PURE__ */ jsxs("div", { className: "flex-1", children: [
+          /* @__PURE__ */ jsx("p", { className: "text-sm font-medium text-stone-800", children: emp.name }),
+          /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: r ? `\u0E40\u0E02\u0E49\u0E32 ${r.clockIn}${r.clockOut ? ` \xB7 \u0E2D\u0E2D\u0E01 ${r.clockOut}` : ""}` : "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E25\u0E07\u0E40\u0E27\u0E25\u0E32" }),
+          r?.project && /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-500 mt-0.5", children: [
+            "\u{1F4CB} ",
+            r.project
+          ] })
+        ] }),
+        r ? /* @__PURE__ */ jsx(CircleCheck, { size: 18, className: "text-emerald-500" }) : /* @__PURE__ */ jsx(CircleDashed, { size: 18, className: "text-stone-300" })
+      ] }, emp.id);
+    }) })
+  ] });
+}
+function LeaveTab({ data, setData, currentUser, isAdmin, notify }) {
+  const [showForm, setShowForm] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const myLeaves = !isAdmin ? data.leaves.filter((l) => l.employeeId === currentUser.id).sort((a, b) => b.id.localeCompare(a.id)) : [];
+  const pendingForAdmin = data.leaves.filter((l) => l.status === "pending");
+  const year = todayStr().slice(0, 4);
+  const today = todayStr();
+  const upcomingHolidays = [...data.holidays].filter((h) => h.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+  function addLeave(leave) {
+    setData((prev) => ({ ...prev, leaves: [...prev.leaves, { id: `lv-${Date.now()}`, employeeId: currentUser.id, status: "pending", ...leave }] }));
+    notify("admin", `${currentUser.name} \u0E02\u0E2D\u0E25\u0E32 (${leave.type})`);
+    setShowForm(false);
+  }
+  function setStatus(id, status) {
+    const lv = data.leaves.find((l) => l.id === id);
+    setData((prev) => ({ ...prev, leaves: prev.leaves.map((l) => l.id === id ? { ...l, status } : l) }));
+    if (lv) notify(lv.employeeId, `\u0E04\u0E33\u0E02\u0E2D\u0E25\u0E32 ${lv.type} \u0E02\u0E2D\u0E07\u0E04\u0E38\u0E13${status === "approved" ? "\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34" : "\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34"}`);
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    !isAdmin && /* @__PURE__ */ jsxs("button", { onClick: () => setShowForm(true), className: "w-full bg-stone-900 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold text-sm active:scale-[0.98] transition", children: [
+      /* @__PURE__ */ jsx(Plus, { size: 18 }),
+      " \u0E02\u0E2D\u0E25\u0E32\u0E07\u0E32\u0E19"
+    ] }),
+    !isAdmin && /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: [
+        "\u0E42\u0E04\u0E27\u0E15\u0E49\u0E32\u0E01\u0E32\u0E23\u0E25\u0E32\u0E1B\u0E35 ",
+        year
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: LEAVE_TYPES.map((t) => {
+        const quota = currentUser.leaveQuota?.[t] ?? 0;
+        const used = leaveUsed(data, currentUser.id, t, year);
+        const pct = quota > 0 ? Math.min(100, used / quota * 100) : 0;
+        return /* @__PURE__ */ jsxs("div", { className: "bg-stone-50 rounded-xl p-2.5", children: [
+          /* @__PURE__ */ jsx("p", { className: "text-xs font-medium text-stone-700", children: t }),
+          /* @__PURE__ */ jsxs("p", { className: "text-sm font-bold text-stone-900 tabular-nums mt-0.5", children: [
+            used,
+            " ",
+            /* @__PURE__ */ jsxs("span", { className: "text-stone-400 font-normal text-xs", children: [
+              "/ ",
+              quota,
+              " \u0E27\u0E31\u0E19"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsx("div", { className: "h-1.5 bg-stone-200 rounded-full mt-1.5 overflow-hidden", children: /* @__PURE__ */ jsx("div", { className: `h-full rounded-full ${pct >= 100 ? "bg-rose-400" : "bg-amber-400"}`, style: { width: `${pct}%` } }) })
+        ] }, t);
+      }) })
+    ] }),
+    isAdmin && /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: [
+        "\u0E23\u0E2D\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34 ",
+        /* @__PURE__ */ jsxs("span", { className: "text-amber-600", children: [
+          "(",
+          pendingForAdmin.length,
+          ")"
+        ] })
+      ] }),
+      pendingForAdmin.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E44\u0E21\u0E48\u0E21\u0E35\u0E04\u0E33\u0E02\u0E2D\u0E17\u0E35\u0E48\u0E23\u0E2D\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-3", children: pendingForAdmin.map((l) => {
+        const emp = data.employees.find((e) => e.id === l.employeeId);
+        return /* @__PURE__ */ jsxs("div", { className: "border border-stone-100 rounded-xl p-3", children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+            /* @__PURE__ */ jsx(Avatar, { emp, size: "w-7 h-7", textSize: "text-xs" }),
+            /* @__PURE__ */ jsxs("div", { children: [
+              /* @__PURE__ */ jsx("p", { className: "text-sm font-medium text-stone-800", children: emp?.name }),
+              /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400", children: [
+                l.type,
+                " \xB7 ",
+                formatThaiDate(l.startDate),
+                " - ",
+                formatThaiDate(l.endDate)
+              ] })
+            ] })
+          ] }),
+          l.reason && /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-500 mb-2", children: [
+            '"',
+            l.reason,
+            '"'
+          ] }),
+          /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxs("button", { onClick: () => setStatus(l.id, "approved"), className: "flex-1 bg-emerald-500 text-white text-xs font-medium py-2 rounded-lg flex items-center justify-center gap-1", children: [
+              /* @__PURE__ */ jsx(Check, { size: 14 }),
+              " \u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34"
+            ] }),
+            /* @__PURE__ */ jsxs("button", { onClick: () => setStatus(l.id, "rejected"), className: "flex-1 bg-rose-50 text-rose-600 text-xs font-medium py-2 rounded-lg flex items-center justify-center gap-1", children: [
+              /* @__PURE__ */ jsx(X, { size: 14 }),
+              " \u0E44\u0E21\u0E48\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34"
+            ] })
+          ] })
+        ] }, l.id);
+      }) })
+    ] }),
+    !isAdmin && /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: "\u0E04\u0E33\u0E02\u0E2D\u0E25\u0E32\u0E02\u0E2D\u0E07\u0E09\u0E31\u0E19" }),
+      myLeaves.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E04\u0E33\u0E02\u0E2D\u0E25\u0E32" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-3", children: myLeaves.map((l) => /* @__PURE__ */ jsxs("div", { className: "border border-stone-100 rounded-xl p-3", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+          /* @__PURE__ */ jsx("p", { className: "text-sm font-medium text-stone-800", children: l.type }),
+          /* @__PURE__ */ jsx(Badge, { status: l.status })
+        ] }),
+        /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400", children: [
+          formatThaiDate(l.startDate),
+          " - ",
+          formatThaiDate(l.endDate)
+        ] }),
+        l.reason && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-500 mt-1", children: l.reason })
+      ] }, l.id)) })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-700 mb-3 flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsx(Calendar, { size: 14, className: "text-stone-400" }),
+        " \u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E1B\u0E23\u0E30\u0E08\u0E33\u0E1B\u0E35\u0E17\u0E35\u0E48\u0E08\u0E30\u0E16\u0E36\u0E07"
+      ] }),
+      upcomingHolidays.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E44\u0E21\u0E48\u0E21\u0E35\u0E27\u0E31\u0E19\u0E2B\u0E22\u0E38\u0E14\u0E17\u0E35\u0E48\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E44\u0E27\u0E49" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-1.5", children: upcomingHolidays.map((h) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm", children: [
+        /* @__PURE__ */ jsx("span", { className: "text-stone-600", children: h.name }),
+        /* @__PURE__ */ jsx("span", { className: "text-stone-400 text-xs", children: formatThaiDate(h.date) })
+      ] }, h.id)) })
+    ] }),
+    /* @__PURE__ */ jsxs("button", { onClick: () => setShowRules(true), className: "w-full bg-white border border-stone-100 rounded-2xl p-4 flex items-center justify-between", children: [
+      /* @__PURE__ */ jsxs("span", { className: "text-sm font-semibold text-stone-700 flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsx(FileText, { size: 14, className: "text-stone-400" }),
+        " \u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17"
+      ] }),
+      /* @__PURE__ */ jsx(ChevronRight, { size: 16, className: "text-stone-300" })
+    ] }),
+    showForm && /* @__PURE__ */ jsx(LeaveFormModal, { onSubmit: addLeave, onClose: () => setShowForm(false) }),
+    showRules && /* @__PURE__ */ jsx(RulesViewerModal, { rules: data.rules, onClose: () => setShowRules(false) })
+  ] });
+}
+function RulesViewerModal({ rules, onClose }) {
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[75vh] overflow-y-auto", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800 mb-4", children: "\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17" }),
+    rules.length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 text-center py-8", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E32\u0E23\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E01\u0E0E\u0E23\u0E30\u0E40\u0E1A\u0E35\u0E22\u0E1A" }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-3", children: rules.map((r) => /* @__PURE__ */ jsxs("div", { className: "bg-stone-50 rounded-xl p-3", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-medium text-stone-800", children: r.title }),
+      r.description && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-500 mt-1", children: r.description })
+    ] }, r.id)) })
+  ] }) });
+}
+function LeaveFormModal({ onSubmit, onClose }) {
+  const [type, setType] = useState(LEAVE_TYPES[0]);
+  const [startDate, setStartDate] = useState(todayStr());
+  const [endDate, setEndDate] = useState(todayStr());
+  const [reason, setReason] = useState("");
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800 mb-4", children: "\u0E02\u0E2D\u0E25\u0E32\u0E07\u0E32\u0E19" }),
+    /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17\u0E01\u0E32\u0E23\u0E25\u0E32" }),
+    /* @__PURE__ */ jsx("div", { className: "flex flex-wrap gap-2 mt-1.5 mb-4", children: LEAVE_TYPES.map((t) => /* @__PURE__ */ jsx("button", { onClick: () => setType(t), className: `px-3 py-1.5 rounded-full text-xs font-medium ${type === t ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-500"}`, children: t }, t)) }),
+    /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E23\u0E34\u0E48\u0E21" }),
+        /* @__PURE__ */ jsx("input", { type: "date", value: startDate, onChange: (e) => setStartDate(e.target.value), className: "w-full mt-1 border border-stone-200 rounded-xl px-3 py-2 text-sm" })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E2A\u0E34\u0E49\u0E19\u0E2A\u0E38\u0E14" }),
+        /* @__PURE__ */ jsx("input", { type: "date", value: endDate, onChange: (e) => setEndDate(e.target.value), className: "w-full mt-1 border border-stone-200 rounded-xl px-3 py-2 text-sm" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E40\u0E2B\u0E15\u0E38\u0E1C\u0E25 (\u0E44\u0E21\u0E48\u0E1A\u0E31\u0E07\u0E04\u0E31\u0E1A)" }),
+    /* @__PURE__ */ jsx("textarea", { value: reason, onChange: (e) => setReason(e.target.value), rows: 3, className: "w-full mt-1 mb-5 border border-stone-200 rounded-xl px-3 py-2 text-sm resize-none", placeholder: "\u0E23\u0E30\u0E1A\u0E38\u0E40\u0E2B\u0E15\u0E38\u0E1C\u0E25\u0E01\u0E32\u0E23\u0E25\u0E32..." }),
+    /* @__PURE__ */ jsx("button", { onClick: () => onSubmit({ type, startDate, endDate, reason }), className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm", children: "\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E02\u0E2D\u0E25\u0E32" })
+  ] }) });
+}
+const REQUEST_STATUS_LABEL = { pending: "\u0E23\u0E2D\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23", in_progress: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23", resolved: "\u0E41\u0E01\u0E49\u0E44\u0E02\u0E41\u0E25\u0E49\u0E27" };
+const REQUEST_STATUS_CLS = {
+  pending: "bg-amber-100 text-amber-700",
+  in_progress: "bg-sky-100 text-sky-700",
+  resolved: "bg-emerald-100 text-emerald-700"
+};
+function RequestStatusBadge({ status }) {
+  return /* @__PURE__ */ jsx("span", { className: `text-xs font-medium px-2 py-1 rounded-full ${REQUEST_STATUS_CLS[status] || REQUEST_STATUS_CLS.pending}`, children: REQUEST_STATUS_LABEL[status] || status });
+}
+function RequestsTab({ data, setData, currentUser, isAdmin, notify }) {
+  const [showForm, setShowForm] = useState(false);
+  const myRequests = !isAdmin ? data.requests.filter((r) => r.employeeId === currentUser.id).sort((a, b) => b.id.localeCompare(a.id)) : [];
+  const allRequests = [...data.requests].sort((a, b) => {
+    const order = { pending: 0, in_progress: 1, resolved: 2 };
+    return order[a.status] - order[b.status] || b.id.localeCompare(a.id);
+  });
+  function addRequest(req) {
+    setData((prev) => ({
+      ...prev,
+      requests: [...prev.requests, { id: `rq-${Date.now()}`, employeeId: currentUser.id, status: "pending", date: todayStr(), ...req }]
+    }));
+    notify("admin", `${currentUser.name} \u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32: ${req.category}`);
+    setShowForm(false);
+  }
+  function setStatus(id, status) {
+    const rq = data.requests.find((r) => r.id === id);
+    setData((prev) => ({ ...prev, requests: prev.requests.map((r) => r.id === id ? { ...r, status } : r) }));
+    if (rq) notify(rq.employeeId, `\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E41\u0E08\u0E49\u0E07 "${rq.category}" \u0E02\u0E2D\u0E07\u0E04\u0E38\u0E13${status === "resolved" ? "\u0E41\u0E01\u0E49\u0E44\u0E02\u0E40\u0E23\u0E35\u0E22\u0E1A\u0E23\u0E49\u0E2D\u0E22\u0E41\u0E25\u0E49\u0E27" : status === "in_progress" ? "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23" : "\u0E16\u0E39\u0E01\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E2B\u0E21\u0E48"}`);
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    !isAdmin && /* @__PURE__ */ jsxs("button", { onClick: () => setShowForm(true), className: "w-full bg-stone-900 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold text-sm active:scale-[0.98] transition", children: [
+      /* @__PURE__ */ jsx(Wrench, { size: 17 }),
+      " \u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32 / \u0E02\u0E2D\u0E02\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E02\u0E32\u0E14"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: isAdmin ? `\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (${allRequests.length})` : "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E17\u0E35\u0E48\u0E09\u0E31\u0E19\u0E41\u0E08\u0E49\u0E07" }),
+      (isAdmin ? allRequests : myRequests).length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-3", children: (isAdmin ? allRequests : myRequests).map((r) => {
+        const emp = data.employees.find((e) => e.id === r.employeeId);
+        return /* @__PURE__ */ jsxs("div", { className: "border border-stone-100 rounded-xl p-3", children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-2 mb-1.5", children: [
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+              isAdmin && /* @__PURE__ */ jsx(Avatar, { emp, size: "w-6 h-6", textSize: "text-[10px]" }),
+              /* @__PURE__ */ jsxs("div", { children: [
+                /* @__PURE__ */ jsxs("p", { className: "text-sm font-medium text-stone-800", children: [
+                  r.category,
+                  isAdmin && /* @__PURE__ */ jsxs("span", { className: "text-stone-400 font-normal", children: [
+                    " \xB7 ",
+                    emp?.name
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsx("p", { className: "text-[11px] text-stone-400", children: formatThaiDate(r.date) })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsx(RequestStatusBadge, { status: r.status })
+          ] }),
+          r.description && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-500 mb-2", children: r.description }),
+          r.photo && /* @__PURE__ */ jsx("img", { src: r.photo, alt: "\u0E23\u0E39\u0E1B\u0E41\u0E19\u0E1A", className: "w-full max-w-[160px] rounded-lg border border-stone-200 mb-2" }),
+          isAdmin && r.status !== "resolved" && /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+            r.status === "pending" && /* @__PURE__ */ jsx("button", { onClick: () => setStatus(r.id, "in_progress"), className: "flex-1 bg-sky-500 text-white text-xs font-medium py-2 rounded-lg", children: "\u0E23\u0E31\u0E1A\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07 / \u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23" }),
+            /* @__PURE__ */ jsxs("button", { onClick: () => setStatus(r.id, "resolved"), className: "flex-1 bg-emerald-500 text-white text-xs font-medium py-2 rounded-lg flex items-center justify-center gap-1", children: [
+              /* @__PURE__ */ jsx(Check, { size: 13 }),
+              " \u0E41\u0E01\u0E49\u0E44\u0E02\u0E41\u0E25\u0E49\u0E27"
+            ] })
+          ] }),
+          isAdmin && r.status === "resolved" && /* @__PURE__ */ jsx("button", { onClick: () => setStatus(r.id, "pending"), className: "text-xs font-medium text-stone-400", children: "\u0E40\u0E1B\u0E34\u0E14\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07" })
+        ] }, r.id);
+      }) })
+    ] }),
+    showForm && /* @__PURE__ */ jsx(RequestFormModal, { onSubmit: addRequest, onClose: () => setShowForm(false) })
+  ] });
+}
+function RequestFormModal({ onSubmit, onClose }) {
+  const [category, setCategory] = useState(REQUEST_CATEGORIES[0]);
+  const [description, setDescription] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const fileRef = useRef(null);
+  function handlePhoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhoto(reader.result);
+    reader.readAsDataURL(file);
+  }
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-800 mb-4 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsx(Wrench, { size: 16 }),
+      " \u0E41\u0E08\u0E49\u0E07\u0E1B\u0E31\u0E0D\u0E2B\u0E32 / \u0E02\u0E2D\u0E02\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E02\u0E32\u0E14"
+    ] }),
+    /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E2B\u0E21\u0E27\u0E14\u0E2B\u0E21\u0E39\u0E48" }),
+    /* @__PURE__ */ jsx("div", { className: "flex flex-wrap gap-2 mt-1.5 mb-4", children: REQUEST_CATEGORIES.map((c) => /* @__PURE__ */ jsx("button", { onClick: () => setCategory(c), className: `px-3 py-1.5 rounded-full text-xs font-medium ${category === c ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-500"}`, children: c }, c)) }),
+    /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14" }),
+    /* @__PURE__ */ jsx(
+      "textarea",
+      {
+        value: description,
+        onChange: (e) => setDescription(e.target.value),
+        rows: 3,
+        className: "w-full mt-1 mb-4 border border-stone-200 rounded-xl px-3 py-2 text-sm resize-none",
+        placeholder: "\u0E40\u0E0A\u0E48\u0E19 \u0E40\u0E21\u0E32\u0E2A\u0E4C\u0E2B\u0E49\u0E2D\u0E07\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E04\u0E25\u0E34\u0E01\u0E44\u0E21\u0E48\u0E15\u0E34\u0E14, \u0E16\u0E48\u0E32\u0E19 AA \u0E43\u0E19\u0E25\u0E34\u0E49\u0E19\u0E0A\u0E31\u0E01\u0E2B\u0E21\u0E14, \u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E2A\u0E33\u0E23\u0E2D\u0E07\u0E44\u0E1F\u0E2B\u0E49\u0E2D\u0E07\u0E1B\u0E23\u0E30\u0E0A\u0E38\u0E21\u0E44\u0E21\u0E48\u0E15\u0E34\u0E14..."
+      }
+    ),
+    /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E41\u0E19\u0E1A\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E (\u0E44\u0E21\u0E48\u0E1A\u0E31\u0E07\u0E04\u0E31\u0E1A)" }),
+    /* @__PURE__ */ jsx("input", { ref: fileRef, type: "file", accept: "image/*", className: "hidden", onChange: handlePhoto }),
+    photo ? /* @__PURE__ */ jsxs("div", { className: "relative mt-1.5 mb-5 w-28", children: [
+      /* @__PURE__ */ jsx("img", { src: photo, alt: "\u0E41\u0E19\u0E1A\u0E23\u0E39\u0E1B", className: "w-28 h-28 rounded-xl object-cover border border-stone-200" }),
+      /* @__PURE__ */ jsx("button", { onClick: () => setPhoto(null), className: "absolute -top-2 -right-2 bg-rose-500 text-white w-6 h-6 rounded-full flex items-center justify-center", children: /* @__PURE__ */ jsx(X, { size: 12 }) })
+    ] }) : /* @__PURE__ */ jsxs("button", { onClick: () => fileRef.current?.click(), className: "mt-1.5 mb-5 w-full border-2 border-dashed border-stone-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-stone-400", children: [
+      /* @__PURE__ */ jsx(Camera, { size: 18 }),
+      /* @__PURE__ */ jsx("span", { className: "text-xs", children: "\u0E16\u0E48\u0E32\u0E22\u0E23\u0E39\u0E1B\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E" })
+    ] }),
+    /* @__PURE__ */ jsx(
+      "button",
+      {
+        disabled: !description.trim(),
+        onClick: () => onSubmit({ category, description, photo }),
+        className: "w-full bg-amber-500 disabled:opacity-40 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm",
+        children: "\u0E2A\u0E48\u0E07\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E41\u0E08\u0E49\u0E07"
+      }
+    )
+  ] }) });
+}
+function PeopleTab({ data, setData, isAdmin, currentUser }) {
+  const [selected, setSelected] = useState(isAdmin ? null : currentUser.id);
+  const [showAdd, setShowAdd] = useState(false);
+  function addEmployee(emp) {
+    setData((prev) => ({ ...prev, employees: [...prev.employees, { id: `e-${Date.now()}`, documents: [], ...emp }] }));
+    setShowAdd(false);
+  }
+  function updateEmployee(id, patch) {
+    setData((prev) => ({ ...prev, employees: prev.employees.map((e) => e.id === id ? { ...e, ...patch } : e) }));
+  }
+  function deleteEmployee(id) {
+    setData((prev) => ({ ...prev, employees: prev.employees.filter((e) => e.id !== id) }));
+    setSelected(null);
+  }
+  if (selected) {
+    const emp = data.employees.find((e) => e.id === selected);
+    return /* @__PURE__ */ jsx(
+      EmployeeDetail,
+      {
+        emp,
+        isAdmin,
+        isOwnProfile: !isAdmin && emp?.id === currentUser.id,
+        onBack: isAdmin ? () => setSelected(null) : null,
+        onUpdate: (patch) => updateEmployee(selected, patch),
+        onDelete: () => deleteEmployee(selected)
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-3", children: [
+    isAdmin && /* @__PURE__ */ jsxs("button", { onClick: () => setShowAdd(true), className: "w-full bg-stone-900 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold text-sm", children: [
+      /* @__PURE__ */ jsx(Plus, { size: 18 }),
+      " \u0E40\u0E1E\u0E34\u0E48\u0E21\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19"
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-2", children: data.employees.map((e) => /* @__PURE__ */ jsxs("button", { onClick: () => setSelected(e.id), className: "w-full bg-white rounded-2xl p-3 border border-stone-100 flex items-center gap-3", children: [
+      /* @__PURE__ */ jsx(Avatar, { emp: e, size: "w-12 h-12" }),
+      /* @__PURE__ */ jsxs("div", { className: "text-left flex-1", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800", children: e.name }),
+        /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: e.position })
+      ] }),
+      /* @__PURE__ */ jsx(ChevronRight, { size: 16, className: "text-stone-300" })
+    ] }, e.id)) }),
+    showAdd && /* @__PURE__ */ jsx(EmployeeFormModal, { onSubmit: addEmployee, onClose: () => setShowAdd(false) })
+  ] });
+}
+function EmployeeDetail({ emp, isAdmin, isOwnProfile, onBack, onUpdate, onDelete }) {
+  const fileRef = useRef(null);
+  const [docName, setDocName] = useState("");
+  const [showChangePin, setShowChangePin] = useState(false);
+  const [showResetPin, setShowResetPin] = useState(false);
+  const [showEditInfo, setShowEditInfo] = useState(false);
+  const [showEditQuota, setShowEditQuota] = useState(false);
+  const [showEditRole, setShowEditRole] = useState(false);
+  const canEditPhoto = isAdmin || isOwnProfile;
+  const canManageDocs = isAdmin;
+  const canEditPersonal = isAdmin || isOwnProfile;
+  function handlePhoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onUpdate({ photo: reader.result });
+    reader.readAsDataURL(file);
+  }
+  function addDoc() {
+    if (!docName.trim()) return;
+    onUpdate({ documents: [...emp.documents || [], { id: `d-${Date.now()}`, name: docName.trim(), date: todayStr() }] });
+    setDocName("");
+  }
+  function removeDoc(id) {
+    onUpdate({ documents: (emp.documents || []).filter((d) => d.id !== id) });
+  }
+  if (!emp) return null;
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    onBack && /* @__PURE__ */ jsxs("button", { onClick: onBack, className: "flex items-center gap-1 text-sm text-stone-500 font-medium", children: [
+      /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }),
+      " \u0E01\u0E25\u0E31\u0E1A"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-5 border border-stone-100 text-center", children: [
+      /* @__PURE__ */ jsxs("div", { className: "relative inline-block", children: [
+        /* @__PURE__ */ jsx(Avatar, { emp, size: "w-20 h-20", textSize: "text-2xl" }),
+        canEditPhoto && /* @__PURE__ */ jsx("button", { onClick: () => fileRef.current?.click(), className: "absolute -bottom-1 -right-1 bg-amber-500 text-stone-900 w-7 h-7 rounded-full flex items-center justify-center", children: /* @__PURE__ */ jsx(Camera, { size: 13 }) }),
+        /* @__PURE__ */ jsx("input", { ref: fileRef, type: "file", accept: "image/*", className: "hidden", onChange: handlePhoto })
+      ] }),
+      /* @__PURE__ */ jsx("p", { className: "text-lg mt-3", style: displayFont, children: emp.name }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: emp.position })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "bg-white rounded-2xl p-4 border border-stone-100 space-y-3", children: /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between", children: [
+      /* @__PURE__ */ jsxs("div", { className: "space-y-3", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm text-stone-600", children: [
+          /* @__PURE__ */ jsx(Phone, { size: 14, className: "text-stone-400" }),
+          " ",
+          emp.phone
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm text-stone-600", children: [
+          /* @__PURE__ */ jsx(Briefcase, { size: 14, className: "text-stone-400" }),
+          " ",
+          emp.position
+        ] }),
+        isAdmin && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm text-stone-600", children: [
+          /* @__PURE__ */ jsx(Wallet, { size: 14, className: "text-stone-400" }),
+          " \u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19 ",
+          fmtMoney(emp.salary),
+          " \u0E1A\u0E32\u0E17"
+        ] })
+      ] }),
+      isAdmin && /* @__PURE__ */ jsx("button", { onClick: () => setShowEditRole(true), className: "text-xs font-medium text-amber-600 shrink-0", children: "\u0E41\u0E01\u0E49\u0E44\u0E02" })
+    ] }) }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-3", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700", children: "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27" }),
+        canEditPersonal && /* @__PURE__ */ jsx("button", { onClick: () => setShowEditInfo(true), className: "text-xs font-medium text-amber-600", children: "\u0E41\u0E01\u0E49\u0E44\u0E02" })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "space-y-2 text-sm text-stone-600", children: [
+        /* @__PURE__ */ jsx(InfoRow, { label: "\u0E2D\u0E35\u0E40\u0E21\u0E25", value: emp.email }),
+        /* @__PURE__ */ jsx(InfoRow, { label: "\u0E40\u0E25\u0E02\u0E1A\u0E31\u0E15\u0E23\u0E1B\u0E23\u0E30\u0E0A\u0E32\u0E0A\u0E19", value: emp.idCard }),
+        /* @__PURE__ */ jsx(InfoRow, { label: "\u0E27\u0E31\u0E19\u0E40\u0E01\u0E34\u0E14", value: emp.birthDate ? formatThaiDate(emp.birthDate) : "" }),
+        /* @__PURE__ */ jsx(InfoRow, { label: "\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48", value: emp.address })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-rose-50 rounded-2xl p-4 border border-rose-100", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-3", children: [
+        /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-rose-700 flex items-center gap-1.5", children: [
+          /* @__PURE__ */ jsx(Phone, { size: 14 }),
+          " \u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19"
+        ] }),
+        canEditPersonal && /* @__PURE__ */ jsx("button", { onClick: () => setShowEditInfo(true), className: "text-xs font-medium text-rose-600", children: "\u0E41\u0E01\u0E49\u0E44\u0E02" })
+      ] }),
+      emp.emergencyName || emp.emergencyPhone ? /* @__PURE__ */ jsxs("div", { className: "space-y-1 text-sm", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-rose-900 font-medium", children: emp.emergencyName || "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E37\u0E48\u0E2D" }),
+        /* @__PURE__ */ jsxs("p", { className: "text-rose-700", children: [
+          emp.emergencyPhone || "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23",
+          " ",
+          emp.emergencyRelation && `\xB7 ${emp.emergencyRelation}`
+        ] })
+      ] }) : /* @__PURE__ */ jsx("p", { className: "text-xs text-rose-400", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E30\u0E1A\u0E38\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19" })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-3", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700", children: "\u0E42\u0E04\u0E27\u0E15\u0E49\u0E32\u0E01\u0E32\u0E23\u0E25\u0E32\u0E15\u0E48\u0E2D\u0E1B\u0E35" }),
+        isAdmin && /* @__PURE__ */ jsx("button", { onClick: () => setShowEditQuota(true), className: "text-xs font-medium text-amber-600", children: "\u0E41\u0E01\u0E49\u0E44\u0E02" })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: LEAVE_TYPES.map((t) => /* @__PURE__ */ jsxs("div", { className: "bg-stone-50 rounded-xl p-2.5", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-500", children: t }),
+        /* @__PURE__ */ jsxs("p", { className: "text-sm font-bold text-stone-800 tabular-nums", children: [
+          emp.leaveQuota?.[t] ?? 0,
+          " \u0E27\u0E31\u0E19/\u0E1B\u0E35"
+        ] })
+      ] }, t)) })
+    ] }),
+    (isOwnProfile || isAdmin) && /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-700 mb-3 flex items-center gap-2", children: [
+        /* @__PURE__ */ jsx(Lock, { size: 14, className: "text-stone-400" }),
+        " \u0E04\u0E27\u0E32\u0E21\u0E1B\u0E25\u0E2D\u0E14\u0E20\u0E31\u0E22"
+      ] }),
+      isOwnProfile && /* @__PURE__ */ jsxs("button", { onClick: () => setShowChangePin(true), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsx("span", { children: "\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E23\u0E2B\u0E31\u0E2A PIN \u0E02\u0E2D\u0E07\u0E09\u0E31\u0E19" }),
+        /* @__PURE__ */ jsx(ChevronRight, { size: 15, className: "text-stone-300" })
+      ] }),
+      isAdmin && !isOwnProfile && /* @__PURE__ */ jsxs("button", { onClick: () => setShowResetPin(true), className: "w-full flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2.5 text-sm text-stone-700", children: [
+        /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsx(RefreshCw, { size: 13, className: "text-stone-400" }),
+          " \u0E15\u0E31\u0E49\u0E07\u0E23\u0E2B\u0E31\u0E2A PIN \u0E43\u0E2B\u0E21\u0E48\u0E43\u0E2B\u0E49\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E04\u0E19\u0E19\u0E35\u0E49"
+        ] }),
+        /* @__PURE__ */ jsx(ChevronRight, { size: 15, className: "text-stone-300" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700 mb-3", children: "\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23 / \u0E44\u0E1F\u0E25\u0E4C\u0E41\u0E19\u0E1A" }),
+      (emp.documents || []).length === 0 && /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 mb-2", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23" }),
+      /* @__PURE__ */ jsx("div", { className: "space-y-1.5 mb-3", children: (emp.documents || []).map((d) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm text-stone-700", children: [
+          /* @__PURE__ */ jsx(FileText, { size: 14, className: "text-stone-400" }),
+          " ",
+          d.name
+        ] }),
+        canManageDocs && /* @__PURE__ */ jsx("button", { onClick: () => removeDoc(d.id), children: /* @__PURE__ */ jsx(Trash2, { size: 14, className: "text-rose-400" }) })
+      ] }, d.id)) }),
+      canManageDocs && /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsx("input", { value: docName, onChange: (e) => setDocName(e.target.value), placeholder: "\u0E0A\u0E37\u0E48\u0E2D\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23 \u0E40\u0E0A\u0E48\u0E19 \u0E2A\u0E33\u0E40\u0E19\u0E32\u0E1A\u0E31\u0E15\u0E23\u0E1B\u0E23\u0E30\u0E0A\u0E32\u0E0A\u0E19", className: "flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm" }),
+        /* @__PURE__ */ jsx("button", { onClick: addDoc, className: "bg-stone-900 text-white rounded-xl px-3", children: /* @__PURE__ */ jsx(Plus, { size: 16 }) })
+      ] })
+    ] }),
+    isAdmin && /* @__PURE__ */ jsxs("button", { onClick: onDelete, className: "w-full text-rose-500 text-sm font-medium py-2 flex items-center justify-center gap-1", children: [
+      /* @__PURE__ */ jsx(Trash2, { size: 14 }),
+      " \u0E25\u0E1A\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E04\u0E19\u0E19\u0E35\u0E49"
+    ] }),
+    showChangePin && /* @__PURE__ */ jsx(
+      ChangePinModal,
+      {
+        currentPin: emp.pin,
+        onSave: (newPin) => {
+          onUpdate({ pin: newPin });
+          setShowChangePin(false);
+        },
+        onClose: () => setShowChangePin(false)
+      }
+    ),
+    showResetPin && /* @__PURE__ */ jsx(
+      ResetPinModal,
+      {
+        empName: emp.name,
+        onSave: (newPin) => {
+          onUpdate({ pin: newPin });
+          setShowResetPin(false);
+        },
+        onClose: () => setShowResetPin(false)
+      }
+    ),
+    showEditInfo && /* @__PURE__ */ jsx(
+      PersonalInfoModal,
+      {
+        emp,
+        onSave: (patch) => {
+          onUpdate(patch);
+          setShowEditInfo(false);
+        },
+        onClose: () => setShowEditInfo(false)
+      }
+    ),
+    showEditQuota && /* @__PURE__ */ jsx(
+      LeaveQuotaModal,
+      {
+        emp,
+        onSave: (quota) => {
+          onUpdate({ leaveQuota: quota });
+          setShowEditQuota(false);
+        },
+        onClose: () => setShowEditQuota(false)
+      }
+    ),
+    showEditRole && /* @__PURE__ */ jsx(
+      RoleModal,
+      {
+        emp,
+        onSave: (patch) => {
+          onUpdate(patch);
+          setShowEditRole(false);
+        },
+        onClose: () => setShowEditRole(false)
+      }
+    )
+  ] });
+}
+function RoleModal({ emp, onSave, onClose }) {
+  const [position, setPosition] = useState(emp.position || "");
+  const [salary, setSalary] = useState(emp.salary ?? 0);
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-800 mb-4 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsx(Briefcase, { size: 16 }),
+      " \u0E41\u0E01\u0E49\u0E44\u0E02\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 / \u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-3 mb-5", children: [
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07\u0E07\u0E32\u0E19" }),
+        /* @__PURE__ */ jsx("input", { value: position, onChange: (e) => setPosition(e.target.value), placeholder: "\u0E40\u0E0A\u0E48\u0E19 \u0E1C\u0E39\u0E49\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E1D\u0E48\u0E32\u0E22\u0E02\u0E32\u0E22", className: "w-full mt-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm" })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { className: "text-xs text-stone-400 font-medium", children: "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19 (\u0E1A\u0E32\u0E17)" }),
+        /* @__PURE__ */ jsx("input", { type: "number", value: salary, onChange: (e) => setSalary(Number(e.target.value) || 0), className: "w-full mt-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx(
+      "button",
+      {
+        disabled: !position.trim(),
+        onClick: () => onSave({ position: position.trim(), salary }),
+        className: "w-full bg-amber-500 disabled:opacity-40 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm",
+        children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07"
+      }
+    )
+  ] }) });
+}
+function InfoRow({ label, value }) {
+  return /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+    /* @__PURE__ */ jsx("span", { className: "text-stone-400 shrink-0", children: label }),
+    /* @__PURE__ */ jsx("span", { className: "text-stone-700 text-right", children: value || /* @__PURE__ */ jsx("span", { className: "text-stone-300", children: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38" }) })
+  ] });
+}
+function PersonalInfoModal({ emp, onSave, onClose }) {
+  const [form, setForm] = useState({
+    phone: emp.phone || "",
+    email: emp.email || "",
+    idCard: emp.idCard || "",
+    birthDate: emp.birthDate || "",
+    address: emp.address || "",
+    emergencyName: emp.emergencyName || "",
+    emergencyPhone: emp.emergencyPhone || "",
+    emergencyRelation: emp.emergencyRelation || ""
+  });
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800 mb-4", children: "\u0E41\u0E01\u0E49\u0E44\u0E02\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27" }),
+    /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium mb-2", children: "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D" }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-4", children: [
+      /* @__PURE__ */ jsx("input", { value: form.phone, onChange: set("phone"), placeholder: "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: form.email, onChange: set("email"), placeholder: "\u0E2D\u0E35\u0E40\u0E21\u0E25", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: form.idCard, onChange: set("idCard"), placeholder: "\u0E40\u0E25\u0E02\u0E1A\u0E31\u0E15\u0E23\u0E1B\u0E23\u0E30\u0E0A\u0E32\u0E0A\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { type: "date", value: form.birthDate, onChange: set("birthDate"), className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("textarea", { value: form.address, onChange: set("address"), rows: 2, placeholder: "\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm resize-none" })
+    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400 font-medium mb-2", children: "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19" }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-5", children: [
+      /* @__PURE__ */ jsx("input", { value: form.emergencyName, onChange: set("emergencyName"), placeholder: "\u0E0A\u0E37\u0E48\u0E2D\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: form.emergencyPhone, onChange: set("emergencyPhone"), placeholder: "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23\u0E09\u0E38\u0E01\u0E40\u0E09\u0E34\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: form.emergencyRelation, onChange: set("emergencyRelation"), placeholder: "\u0E04\u0E27\u0E32\u0E21\u0E2A\u0E31\u0E21\u0E1E\u0E31\u0E19\u0E18\u0E4C \u0E40\u0E0A\u0E48\u0E19 \u0E21\u0E32\u0E23\u0E14\u0E32, \u0E04\u0E39\u0E48\u0E2A\u0E21\u0E23\u0E2A", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" })
+    ] }),
+    /* @__PURE__ */ jsx("button", { onClick: () => onSave(form), className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm", children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25" })
+  ] }) });
+}
+function LeaveQuotaModal({ emp, onSave, onClose }) {
+  const [quota, setQuota] = useState({ ...DEFAULT_LEAVE_QUOTA, ...emp.leaveQuota || {} });
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800 mb-1", children: "\u0E42\u0E04\u0E27\u0E15\u0E49\u0E32\u0E01\u0E32\u0E23\u0E25\u0E32 (\u0E27\u0E31\u0E19/\u0E1B\u0E35)" }),
+    /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 mb-4", children: [
+      "\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A ",
+      emp.name
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-3 mb-5", children: LEAVE_TYPES.map((t) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsx("span", { className: "text-sm text-stone-700", children: t }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          type: "number",
+          min: 0,
+          value: quota[t] ?? 0,
+          onChange: (e) => setQuota((q) => ({ ...q, [t]: Number(e.target.value) || 0 })),
+          className: "w-20 border border-stone-200 rounded-xl px-3 py-2 text-sm text-right tabular-nums"
+        }
+      )
+    ] }, t)) }),
+    /* @__PURE__ */ jsx("button", { onClick: () => onSave(quota), className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm", children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E42\u0E04\u0E27\u0E15\u0E49\u0E32" })
+  ] }) });
+}
+function ChangePinModal({ currentPin, onSave, onClose }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  function submit() {
+    if (current !== currentPin) return setError("\u0E23\u0E2B\u0E31\u0E2A PIN \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+    if (next.length !== 4) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 4 \u0E2B\u0E25\u0E31\u0E01");
+    if (next !== confirm) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E17\u0E31\u0E49\u0E07\u0E2A\u0E2D\u0E07\u0E0A\u0E48\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E19");
+    onSave(next);
+  }
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-800 mb-4 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsx(Lock, { size: 16 }),
+      " \u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E23\u0E2B\u0E31\u0E2A PIN"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-2", children: [
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: current, onChange: (e) => setCurrent(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "PIN \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" }),
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: next, onChange: (e) => setNext(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "PIN \u0E43\u0E2B\u0E21\u0E48 (4 \u0E2B\u0E25\u0E31\u0E01)", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" }),
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: confirm, onChange: (e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19 PIN \u0E43\u0E2B\u0E21\u0E48", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" })
+    ] }),
+    error && /* @__PURE__ */ jsx("p", { className: "text-rose-500 text-xs mb-3", children: error }),
+    /* @__PURE__ */ jsx("button", { onClick: submit, className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm mt-2", children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01 PIN \u0E43\u0E2B\u0E21\u0E48" })
+  ] }) });
+}
+function ResetPinModal({ empName, onSave, onClose }) {
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  function submit() {
+    if (next.length !== 4) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 4 \u0E2B\u0E25\u0E31\u0E01");
+    if (next !== confirm) return setError("PIN \u0E43\u0E2B\u0E21\u0E48\u0E17\u0E31\u0E49\u0E07\u0E2A\u0E2D\u0E07\u0E0A\u0E48\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E19");
+    onSave(next);
+  }
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsxs("p", { className: "text-sm font-semibold text-stone-800 mb-1 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsx(RefreshCw, { size: 16 }),
+      " \u0E15\u0E31\u0E49\u0E07\u0E23\u0E2B\u0E31\u0E2A PIN \u0E43\u0E2B\u0E21\u0E48"
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400 mb-4", children: [
+      "\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A ",
+      empName,
+      " \u2014 \u0E44\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E43\u0E2A\u0E48 PIN \u0E40\u0E14\u0E34\u0E21 \u0E40\u0E1E\u0E23\u0E32\u0E30\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E42\u0E14\u0E22\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-2 mb-2", children: [
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: next, onChange: (e) => setNext(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "PIN \u0E43\u0E2B\u0E21\u0E48 (4 \u0E2B\u0E25\u0E31\u0E01)", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" }),
+      /* @__PURE__ */ jsx("input", { type: "password", inputMode: "numeric", maxLength: 4, value: confirm, onChange: (e) => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 4)), placeholder: "\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19 PIN \u0E43\u0E2B\u0E21\u0E48", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" })
+    ] }),
+    error && /* @__PURE__ */ jsx("p", { className: "text-rose-500 text-xs mb-3", children: error }),
+    /* @__PURE__ */ jsx("button", { onClick: submit, className: "w-full bg-amber-500 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm mt-2", children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01 PIN \u0E43\u0E2B\u0E21\u0E48" })
+  ] }) });
+}
+function EmployeeFormModal({ onSubmit, onClose }) {
+  const [name, setName] = useState("");
+  const [position, setPosition] = useState("");
+  const [phone, setPhone] = useState("");
+  const [salary, setSalary] = useState("");
+  const [pin, setPin] = useState("");
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 bg-black/40 z-30 flex items-end justify-center", onClick: onClose, children: /* @__PURE__ */ jsxs("div", { className: "bg-white w-full max-w-md rounded-t-3xl p-5 pb-8", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsx("div", { className: "w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" }),
+    /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800 mb-4", children: "\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E43\u0E2B\u0E21\u0E48" }),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-3 mb-2", children: [
+      /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: "\u0E0A\u0E37\u0E48\u0E2D-\u0E19\u0E32\u0E21\u0E2A\u0E01\u0E38\u0E25", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: position, onChange: (e) => setPosition(e.target.value), placeholder: "\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: phone, onChange: (e) => setPhone(e.target.value), placeholder: "\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: salary, onChange: (e) => setSalary(e.target.value), placeholder: "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19 (\u0E1A\u0E32\u0E17)", type: "number", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm" }),
+      /* @__PURE__ */ jsx("input", { value: pin, onChange: (e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4)), inputMode: "numeric", maxLength: 4, placeholder: "PIN \u0E40\u0E23\u0E34\u0E48\u0E21\u0E15\u0E49\u0E19 4 \u0E2B\u0E25\u0E31\u0E01 (\u0E40\u0E27\u0E49\u0E19\u0E27\u0E48\u0E32\u0E07\u0E44\u0E14\u0E49)", className: "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm tracking-widest" })
+    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-[11px] text-stone-400 mb-4", children: "\u0E16\u0E49\u0E32\u0E40\u0E27\u0E49\u0E19\u0E27\u0E48\u0E32\u0E07 \u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E43\u0E0A\u0E49\u0E40\u0E25\u0E02 4 \u0E15\u0E31\u0E27\u0E17\u0E49\u0E32\u0E22\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23\u0E40\u0E1B\u0E47\u0E19 PIN \u0E40\u0E23\u0E34\u0E48\u0E21\u0E15\u0E49\u0E19 \u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E40\u0E2D\u0E07\u0E44\u0E14\u0E49\u0E20\u0E32\u0E22\u0E2B\u0E25\u0E31\u0E07" }),
+    /* @__PURE__ */ jsx(
+      "button",
+      {
+        disabled: !name.trim() || !phone.trim(),
+        onClick: () => onSubmit({ name, position, phone, salary: Number(salary) || 0, photo: null, pin: pin.length === 4 ? pin : last4(phone) }),
+        className: "w-full bg-amber-500 disabled:opacity-40 text-stone-900 font-semibold rounded-2xl py-3.5 text-sm",
+        children: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E1E\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19"
+      }
+    )
+  ] }) });
+}
+function PayrollTab({ data, setData, currentUser, isAdmin, notify }) {
+  const [mk, setMk] = useState(monthKey(todayStr()));
+  const [payslipFor, setPayslipFor] = useState(null);
+  function shiftMonth(delta) {
+    const [y, m] = mk.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setMk(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  function computeFor(emp) {
+    const records = data.attendance.filter((a) => a.employeeId === emp.id && monthKey(a.date) === mk && a.clockOut);
+    const otHours = records.reduce((s, r) => s + Math.max(0, hoursBetween(r.clockIn, r.clockOut) - 8), 0);
+    const hourlyRate = emp.salary / 208;
+    const otPay = Math.round(otHours * hourlyRate * 1.5);
+    const total = emp.salary + otPay;
+    const daysPresent = records.length;
+    const paid = !!data.payrollPaid[`${emp.id}-${mk}`];
+    return { otHours, otPay, total, daysPresent, paid };
+  }
+  function togglePaid(emp) {
+    const key = `${emp.id}-${mk}`;
+    const willBePaid = !data.payrollPaid[key];
+    setData((prev) => ({ ...prev, payrollPaid: { ...prev.payrollPaid, [key]: willBePaid } }));
+    if (willBePaid) notify(emp.id, `\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19 ${monthLabel(mk)} \u0E02\u0E2D\u0E07\u0E04\u0E38\u0E13\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27`);
+  }
+  const list = isAdmin ? data.employees : [currentUser];
+  if (payslipFor) {
+    const emp = data.employees.find((e) => e.id === payslipFor);
+    const calc = computeFor(emp);
+    return /* @__PURE__ */ jsx(Payslip, { emp, mk, calc, onBack: () => setPayslipFor(null) });
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-stone-100", children: [
+      /* @__PURE__ */ jsx("button", { onClick: () => shiftMonth(-1), children: /* @__PURE__ */ jsx(ChevronLeft, { size: 18, className: "text-stone-400" }) }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800", children: monthLabel(mk) }),
+      /* @__PURE__ */ jsx("button", { onClick: () => shiftMonth(1), children: /* @__PURE__ */ jsx(ChevronRight, { size: 18, className: "text-stone-400" }) })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "space-y-2", children: list.map((emp) => {
+      const calc = computeFor(emp);
+      return /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-4 border border-stone-100", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-3", children: [
+          /* @__PURE__ */ jsx(Avatar, { emp, size: "w-9 h-9", textSize: "text-xs" }),
+          /* @__PURE__ */ jsxs("div", { className: "flex-1", children: [
+            /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800", children: emp.name }),
+            /* @__PURE__ */ jsxs("p", { className: "text-xs text-stone-400", children: [
+              "\u0E21\u0E32\u0E17\u0E33\u0E07\u0E32\u0E19 ",
+              calc.daysPresent,
+              " \u0E27\u0E31\u0E19 \xB7 \u0E42\u0E2D\u0E17\u0E35 ",
+              calc.otHours.toFixed(1),
+              " \u0E0A\u0E21."
+            ] })
+          ] }),
+          calc.paid ? /* @__PURE__ */ jsx("span", { className: "text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full", children: "\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27" }) : /* @__PURE__ */ jsx("span", { className: "text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full", children: "\u0E23\u0E2D\u0E08\u0E48\u0E32\u0E22" })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between", children: [
+          /* @__PURE__ */ jsxs("p", { className: "text-lg font-bold text-stone-900 tabular-nums", children: [
+            fmtMoney(calc.total),
+            " \u0E1A\u0E32\u0E17"
+          ] }),
+          /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsx("button", { onClick: () => setPayslipFor(emp.id), className: "text-xs font-medium text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full", children: "\u0E14\u0E39\u0E2A\u0E25\u0E34\u0E1B" }),
+            isAdmin && /* @__PURE__ */ jsx("button", { onClick: () => togglePaid(emp), className: `text-xs font-medium px-3 py-1.5 rounded-full ${calc.paid ? "bg-stone-100 text-stone-500" : "bg-stone-900 text-white"}`, children: calc.paid ? "\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01" : "\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27" })
+          ] })
+        ] })
+      ] }, emp.id);
+    }) })
+  ] });
+}
+function Payslip({ emp, mk, calc, onBack }) {
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxs("button", { onClick: onBack, className: "flex items-center gap-1 text-sm text-stone-500 font-medium", children: [
+      /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }),
+      " \u0E01\u0E25\u0E31\u0E1A"
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "bg-white rounded-2xl p-5 border border-stone-100", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-4 text-stone-800", children: [
+        /* @__PURE__ */ jsx(Sparkles, { size: 16, className: "text-amber-500" }),
+        /* @__PURE__ */ jsxs("p", { className: "text-base", style: displayFont, children: [
+          "\u0E2A\u0E25\u0E34\u0E1B\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19 \xB7 ",
+          monthLabel(mk)
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-5 pb-4 border-b border-dashed border-stone-200", children: [
+        /* @__PURE__ */ jsx(Avatar, { emp }),
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-800", children: emp.name }),
+          /* @__PURE__ */ jsx("p", { className: "text-xs text-stone-400", children: emp.position })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "space-y-2.5 text-sm", children: [
+        /* @__PURE__ */ jsx(Row, { label: "\u0E40\u0E07\u0E34\u0E19\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E1E\u0E37\u0E49\u0E19\u0E10\u0E32\u0E19", value: `${fmtMoney(emp.salary)} \u0E1A\u0E32\u0E17` }),
+        /* @__PURE__ */ jsx(Row, { label: `\u0E04\u0E48\u0E32\u0E42\u0E2D\u0E17\u0E35 (${calc.otHours.toFixed(1)} \u0E0A\u0E21.)`, value: `${fmtMoney(calc.otPay)} \u0E1A\u0E32\u0E17` }),
+        /* @__PURE__ */ jsx(Row, { label: "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E21\u0E32\u0E17\u0E33\u0E07\u0E32\u0E19", value: `${calc.daysPresent} \u0E27\u0E31\u0E19` })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "mt-4 pt-4 border-t border-stone-200 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm font-semibold text-stone-700", children: "\u0E22\u0E2D\u0E14\u0E2A\u0E38\u0E17\u0E18\u0E34" }),
+        /* @__PURE__ */ jsxs("p", { className: "text-xl font-bold text-stone-900 tabular-nums", children: [
+          fmtMoney(calc.total),
+          " \u0E1A\u0E32\u0E17"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("p", { className: `text-xs mt-3 font-medium ${calc.paid ? "text-emerald-600" : "text-amber-600"}`, children: [
+        "\u0E2A\u0E16\u0E32\u0E19\u0E30: ",
+        calc.paid ? "\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27" : "\u0E23\u0E2D\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E08\u0E48\u0E32\u0E22"
+      ] })
+    ] })
+  ] });
+}
+function Row({ label, value }) {
+  return /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-stone-600", children: [
+    /* @__PURE__ */ jsx("span", { children: label }),
+    /* @__PURE__ */ jsx("span", { className: "font-medium text-stone-800 tabular-nums", children: value })
+  ] });
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
